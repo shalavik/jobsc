@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobRadar Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css" rel="stylesheet">
+    <style>
+        .job-card {
+            transition: transform 0.2s;
+        }
+        .job-card:hover {
+            transform: translateY(-2px);
+        }
+        .filter-section {
+            transition: max-height 0.3s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow">
+            <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+                <h1 class="text-3xl font-bold text-gray-900">JobRadar Dashboard</h1>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <!-- Filters -->
+            <div class="bg-white shadow rounded-lg mb-6">
+                <div class="px-4 py-5 sm:p-6">
+                    <h2 class="text-lg font-medium text-gray-900 mb-4">Filters</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- Text Search -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Search</label>
+                            <input type="text" id="search" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
+
+                        <!-- Location -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Location</label>
+                            <input type="text" id="location" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
+
+                        <!-- Salary Range -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Salary Range (k)</label>
+                            <div class="flex space-x-2">
+                                <input type="number" id="salary-min" placeholder="Min" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <input type="number" id="salary-max" placeholder="Max" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            </div>
+                        </div>
+
+                        <!-- Job Type -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Job Type</label>
+                            <select id="job-type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">All</option>
+                            </select>
+                        </div>
+
+                        <!-- Experience Level -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Experience Level</label>
+                            <select id="experience" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">All</option>
+                            </select>
+                        </div>
+
+                        <!-- Remote -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Remote</label>
+                            <select id="remote" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">All</option>
+                                <option value="true">Remote Only</option>
+                                <option value="false">On-site Only</option>
+                            </select>
+                        </div>
+
+                        <!-- Source -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Source</label>
+                            <select id="source" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">All</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 flex justify-end">
+                        <button id="reset-filters" class="mr-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Reset
+                        </button>
+                        <button id="apply-filters" class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+                            Apply Filters
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Job List -->
+            <div id="job-list" class="grid grid-cols-1 gap-6">
+                <!-- Jobs will be loaded here -->
+            </div>
+
+            <!-- Loading Indicator -->
+            <div id="loading" class="hidden flex justify-center items-center py-8">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            </div>
+
+            <!-- No Results -->
+            <div id="no-results" class="hidden text-center py-8 text-gray-500">
+                No jobs found matching your criteria
+            </div>
+            <!-- Error Message -->
+            <div id="error-message" class="hidden text-center py-8 text-red-600 font-semibold"></div>
+        </main>
+    </div>
+
+    <script>
+        // State
+        let currentFilters = {};
+        let isLoading = false;
+
+        // DOM Elements
+        const jobList = document.getElementById('job-list');
+        const loading = document.getElementById('loading');
+        const noResults = document.getElementById('no-results');
+        const filterInputs = {
+            search: document.getElementById('search'),
+            location: document.getElementById('location'),
+            'salary-min': document.getElementById('salary-min'),
+            'salary-max': document.getElementById('salary-max'),
+            'job-type': document.getElementById('job-type'),
+            experience: document.getElementById('experience'),
+            remote: document.getElementById('remote'),
+            source: document.getElementById('source')
+        };
+
+        // Load filter options
+        async function loadFilterOptions() {
+            try {
+                const response = await fetch('/api/filters');
+                const data = await response.json();
+                
+                // Populate job types
+                data.job_types.forEach(type => {
+                    const option = document.createElement('option');
+                    option.value = type;
+                    option.textContent = type;
+                    filterInputs['job-type'].appendChild(option);
+                });
+
+                // Populate experience levels
+                data.experience_levels.forEach(level => {
+                    const option = document.createElement('option');
+                    option.value = level;
+                    option.textContent = level;
+                    filterInputs.experience.appendChild(option);
+                });
+
+                // Populate sources
+                data.sources.forEach(source => {
+                    const option = document.createElement('option');
+                    option.value = source;
+                    option.textContent = source;
+                    filterInputs.source.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading filter options:', error);
+            }
+        }
+
+        // Load jobs
+        async function loadJobs() {
+            if (isLoading) return;
+            isLoading = true;
+            loading.classList.remove('hidden');
+            jobList.innerHTML = '';
+            noResults.classList.add('hidden');
+            document.getElementById('error-message').classList.add('hidden');
+            document.getElementById('error-message').textContent = '';
+            try {
+                const queryParams = new URLSearchParams(currentFilters);
+                const response = await fetch(`/api/jobs?${queryParams}`);
+                const data = await response.json();
+                if (data.error) {
+                    document.getElementById('error-message').textContent = data.error;
+                    document.getElementById('error-message').classList.remove('hidden');
+                } else if (data.jobs.length === 0) {
+                    noResults.classList.remove('hidden');
+                } else {
+                    data.jobs.forEach(job => {
+                        const jobCard = createJobCard(job);
+                        jobList.appendChild(jobCard);
+                    });
+                }
+            } catch (error) {
+                document.getElementById('error-message').textContent = 'Failed to load jobs. Please try again later.';
+                document.getElementById('error-message').classList.remove('hidden');
+                console.error('Error loading jobs:', error);
+            } finally {
+                loading.classList.add('hidden');
+                isLoading = false;
+            }
+        }
+
+        // Create job card
+        function createJobCard(job) {
+            const card = document.createElement('div');
+            card.className = 'job-card bg-white shadow rounded-lg p-6';
+            
+            const remoteBadge = job.is_remote ? 
+                '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Remote</span>' : '';
+            
+            const salary = job.salary ? 
+                `<div class="text-sm text-gray-500">${job.salary}</div>` : '';
+            
+            const location = job.location ? 
+                `<div class="text-sm text-gray-500"><i class="fas fa-map-marker-alt mr-1"></i>${job.location}</div>` : '';
+            
+            const jobType = job.job_type ? 
+                `<div class="text-sm text-gray-500"><i class="fas fa-briefcase mr-1"></i>${job.job_type}</div>` : '';
+            
+            const experience = job.experience_level ? 
+                `<div class="text-sm text-gray-500"><i class="fas fa-user-tie mr-1"></i>${job.experience_level}</div>` : '';
+
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900">${job.title}</h3>
+                        <div class="text-sm text-gray-500">${job.company}</div>
+                    </div>
+                    ${remoteBadge}
+                </div>
+                <div class="mt-2 space-y-1">
+                    ${salary}
+                    ${location}
+                    ${jobType}
+                    ${experience}
+                </div>
+                <div class="mt-4 flex justify-between items-center">
+                    <div class="text-sm text-gray-500">
+                        <i class="fas fa-globe mr-1"></i>${job.source}
+                    </div>
+                    <a href="${job.url}" target="_blank" class="text-indigo-600 hover:text-indigo-900">
+                        View Job <i class="fas fa-external-link-alt ml-1"></i>
+                    </a>
+                </div>
+            `;
+            
+            return card;
+        }
+
+        // Update filters
+        function updateFilters() {
+            currentFilters = {};
+            
+            // Text search
+            const searchText = filterInputs.search.value.trim();
+            if (searchText) {
+                currentFilters.title = searchText;
+            }
+            
+            // Other filters
+            for (const [key, input] of Object.entries(filterInputs)) {
+                if (key !== 'search' && input.value) {
+                    currentFilters[key] = input.value;
+                }
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('apply-filters').addEventListener('click', () => {
+            updateFilters();
+            loadJobs();
+        });
+
+        document.getElementById('reset-filters').addEventListener('click', () => {
+            for (const input of Object.values(filterInputs)) {
+                input.value = '';
+            }
+            currentFilters = {};
+            loadJobs();
+        });
+
+        // Initialize
+        loadFilterOptions();
+        loadJobs();
+    </script>
+</body>
+</html> 

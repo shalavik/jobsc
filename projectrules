@@ -1,0 +1,249 @@
+feeds:
+  - name: indeed
+    url: https://www.indeed.com/jobs?q=python&l=remote&sort=date
+    type: html
+    parser: indeed
+    fetch_method: headless
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 60
+
+  - name: stackoverflow
+    url: https://stackoverflow.com/jobs/feed?q=python&l=remote&sort=p
+    type: rss
+    parser: stackoverflow
+    fetch_method: rss
+    rate_limit:
+      requests_per_minute: 30
+      retry_after: 30
+
+  - name: github
+    url: https://jobs.github.com/positions.json?description=python&location=remote
+    type: json
+    parser: github
+    fetch_method: json
+    rate_limit:
+      requests_per_minute: 60
+      retry_after: 10
+
+  - name: weworkremotely
+    url: https://weworkremotely.com/categories/remote-programming-jobs.rss
+    type: rss
+    parser: rss
+    fetch_method: rss
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 30
+      retry_after: 10
+
+  - name: remoteok_rss
+    url: https://remoteok.com/remote-dev-jobs.rss
+    type: rss
+    parser: rss
+    fetch_method: rss
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 30
+      retry_after: 10
+
+  - name: snaphunt
+    url: https://snaphunt.com/job-listing/all-locations/Remote/
+    type: html
+    parser: snaphunt
+    fetch_method: html
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: alljobs
+    url: https://www.alljobs.co.il/
+    type: html
+    parser: alljobs
+    fetch_method: html
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: remotive
+    url: https://remotive.com/remote-jobs/customer-support
+    type: html
+    parser: remotive
+    fetch_method: html
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: workingnomads
+    url: https://www.workingnomads.com/jobs?location=anywhere,thailand&category=customer-success
+    type: html
+    parser: workingnomads
+    fetch_method: html
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: cryptojobslist
+    url: https://cryptojobslist.com/remote
+    type: html
+    parser: cryptojobslist
+    fetch_method: html
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: remote3
+    url: https://www.remote3.co/remote-web3-jobs
+    type: html
+    parser: remote3
+    fetch_method: headless
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: indeed_main
+    url: https://www.indeed.com/
+    type: html
+    parser: indeed
+    fetch_method: headless
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: mindtel
+    url: https://mindtel.atsmantra.com/
+    type: html
+    parser: mindtel
+    fetch_method: html
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: nodesk
+    url: https://nodesk.co/remote-jobs/customer-support/
+    type: html
+    parser: nodesk
+    fetch_method: html
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: cryptocurrencyjobs
+    url: https://cryptocurrencyjobs.co/
+    type: html
+    parser: cryptocurrencyjobs
+    fetch_method: html
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: nodesk_substack
+    url: https://nodesk.substack.com/
+    type: html
+    parser: nodesk_substack
+    fetch_method: rss
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: remotehabits
+    url: https://remotehabits.com/
+    type: html
+    parser: remotehabits
+    fetch_method: html
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: jobspresso
+    url: https://jobspresso.co/remote-customer-service-jobs/
+    type: html
+    parser: jobspresso
+    fetch_method: html
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: weworkremotely_support
+    url: https://weworkremotely.com/categories/remote-customer-support-jobs
+    type: html
+    parser: weworkremotely_support
+    fetch_method: rss
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  # New high-signal boards
+  - name: jobicy
+    url: https://jobicy.com/jobs-rss-feed
+    type: rss
+    parser: rss
+    fetch_method: rss
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: himalayas
+    url: https://rss.himalayas.app/jobs
+    type: rss
+    parser: rss
+    fetch_method: rss
+    headers:
+      User-Agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: supportdriven
+    url: https://supportdriven.com/jobs?format=rss
+    type: rss
+    parser: rss
+    fetch_method: rss
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: web3career
+    url: https://web3.career/remote-jobs.rss
+    type: rss
+    parser: rss
+    fetch_method: rss
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: authenticjobs
+    url: https://authenticjobs.com/rss/index.xml
+    type: rss
+    parser: rss
+    fetch_method: rss
+    headers:
+      User-Agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+filters:
+  keywords: []
+  locations: []
+  exclude: []
+
+notifications:
+  telegram:
+    enabled: true
+    bot_token: "8110388837:AAEY9PxKPti8h1rCccuu00Wrc84q5lgyPPI"
+    chat_id: "6689879104" 
