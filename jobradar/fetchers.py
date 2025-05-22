@@ -336,7 +336,6 @@ class Fetcher:
             "remotehabits": self._parse_remotehabits,
             "jobspresso": self._parse_jobspresso,
             "weworkremotely_support": self._parse_weworkremotely_support,
-            "seek": self._parse_seek,
             # Add more as needed
         }
         parser = parser_map.get(feed.parser)
@@ -445,15 +444,59 @@ class Fetcher:
     def _parse_remoteok(self, soup, feed):
         jobs = []
         job_cards = soup.find_all("tr", class_="job")
+        
+        if not job_cards:
+            logger.warning(f"No job cards found on RemoteOK using primary selector")
+            # Try alternative selectors
+            job_cards = (
+                soup.find_all("div", class_=lambda c: c and "job" in c) or
+                soup.find_all("article", class_=lambda c: c and "job" in c)
+            )
+        
+        logger.info(f"Found {len(job_cards)} job cards on RemoteOK")
+            
         for card in job_cards:
-            title_elem = card.find("h2", attrs={"itemprop": "title"})
-            company_elem = card.find("h3", attrs={"itemprop": "name"})
+            title_elem = (
+                card.find("h2", attrs={"itemprop": "title"}) or
+                card.find("h3", attrs={"itemprop": "title"}) or
+                card.find("div", class_=lambda c: c and "position" in c) or
+                card.find(["h2", "h3", "div"], string=lambda s: s and len(s) > 4)  # Any heading with reasonable text
+            )
+            
+            company_elem = (
+                card.find("h3", attrs={"itemprop": "name"}) or
+                card.find("span", attrs={"itemprop": "name"}) or
+                card.find("div", class_=lambda c: c and "company" in c) or
+                card.find("span", class_=lambda c: c and "company" in c)
+            )
+            
+            job_id = card.get("data-id", "")
+            if not job_id:
+                # Look for other possible ID attributes
+                job_id = card.get("id", "")
+                
+                # Try to extract from URL if available
+                link = card.find("a", href=True)
+                if link and link.get("href", ""):
+                    import re
+                    match = re.search(r'/([^/]+)$', link["href"])
+                    if match:
+                        job_id = match.group(1)
+            
             if title_elem and company_elem:
+                job_url = f"https://remoteok.com/remote-jobs/{job_id}" if job_id else ""
+                
+                # If no job_id was found, try to get complete URL from a link
+                if not job_url and link and link.get("href", ""):
+                    job_url = link["href"]
+                    if job_url.startswith("/"):
+                        job_url = f"https://remoteok.com{job_url}"
+                
                 job = Job(
-                    id=card.get("data-id", ""),
+                    id=job_id or title_elem.text.strip(),  # Fallback to title as ID if needed
                     title=title_elem.text.strip(),
                     company=company_elem.text.strip(),
-                    url=f"https://remoteok.com/remote-jobs/{card.get('data-id', '')}",
+                    url=job_url,
                     source=feed.name,
                     date=""
                 )
@@ -461,20 +504,64 @@ class Fetcher:
         return jobs
 
     def _parse_snaphunt(self, soup, feed):
-        """Parse jobs from snaphunt.com."""
+        """Parse jobs from snaphunt.com with robust selectors."""
         jobs = []
-        job_cards = soup.find_all("div", class_="job-card")
+        
+        # Try multiple selectors for job cards
+        job_cards = (
+            soup.find_all("div", class_="job-card") or
+            soup.find_all("div", class_=lambda c: c and "job" in c) or
+            soup.find_all("li", class_=lambda c: c and "job" in c) or
+            soup.find_all("article")  # Generic fallback
+        )
+        
+        if not job_cards:
+            logger.warning(f"No job cards found on Snaphunt using known selectors")
+            return jobs
+            
+        logger.info(f"Found {len(job_cards)} job cards on Snaphunt")
+        
         for card in job_cards:
-            title_elem = card.find("h3", class_="job-title")
-            company_elem = card.find("div", class_="company-name")
-            link_elem = card.find("a", class_="job-link")
+            # Try various title element possibilities
+            title_elem = (
+                card.find("h3", class_="job-title") or
+                card.find("h2", class_="job-title") or
+                card.find(["h2", "h3", "h4"], class_=lambda c: c and ("title" in c or "position" in c)) or
+                card.find(["h2", "h3", "h4"])  # Any heading
+            )
+            
+            # Try various company element possibilities
+            company_elem = (
+                card.find("div", class_="company-name") or
+                card.find("span", class_="company-name") or
+                card.find(["div", "span"], class_=lambda c: c and "company" in c) or
+                card.find(string=lambda s: s and "at" in s)  # Look for text like "Position at Company"
+            )
+            
+            # Try various link element possibilities
+            link_elem = (
+                card.find("a", class_="job-link") or
+                card.find("a", class_=lambda c: c and "link" in c) or
+                card.find("a", href=True)  # Any link
+            )
             
             if title_elem and company_elem and link_elem:
+                job_url = link_elem.get("href", "")
+                if job_url.startswith("/"):
+                    job_url = f"https://snaphunt.com{job_url}"
+                    
+                company_text = company_elem.text.strip()
+                if isinstance(company_elem, str):  # If we found a string like "at Company"
+                    import re
+                    match = re.search(r'at\s+([^•]+)', company_text)
+                    if match:
+                        company_text = match.group(1).strip()
+                
                 job = Job(
-                    id=link_elem.get("href", "").split("/")[-1],
+                    id=job_url.split("/")[-1] if job_url else title_elem.text.strip(),
                     title=title_elem.text.strip(),
-                    company=company_elem.text.strip(),
-                    url=f"https://snaphunt.com{link_elem.get('href', '')}",
+                    company=company_text,
+                    url=job_url,
                     source=feed.name,
                     date=""
                 )
@@ -482,20 +569,62 @@ class Fetcher:
         return jobs
 
     def _parse_alljobs(self, soup, feed):
-        """Parse jobs from alljobs.co.il."""
+        """Parse jobs from alljobs.co.il with robust selectors."""
         jobs = []
-        job_cards = soup.find_all("div", class_="job-item")
-        for card in job_cards:
-            title_elem = card.find("h2", class_="job-title")
-            company_elem = card.find("div", class_="company-name")
-            link_elem = card.find("a", class_="job-link")
+        
+        # Try multiple selectors for job cards
+        job_cards = (
+            soup.find_all("div", class_="job-item") or
+            soup.find_all("div", class_=lambda c: c and "job" in c) or
+            soup.find_all("li", class_=lambda c: c and "job" in c) or
+            soup.find_all(".job-box") or
+            soup.select(".job-panels .panel")  # Alternative CSS selector
+        )
+        
+        if not job_cards:
+            logger.warning(f"No job cards found on AllJobs using known selectors")
+            return jobs
             
-            if title_elem and company_elem and link_elem:
+        logger.info(f"Found {len(job_cards)} job cards on AllJobs")
+        
+        for card in job_cards:
+            # Try various title element possibilities
+            title_elem = (
+                card.find("h2", class_="job-title") or
+                card.find("h1", class_="job-title") or
+                card.find(["h2", "h3", "h4", "div"], class_=lambda c: c and "title" in c) or
+                card.find("a", class_=lambda c: c and "title" in c) or
+                card.find(["h2", "h3", "h4"])  # Any heading
+            )
+            
+            # Try various company element possibilities
+            company_elem = (
+                card.find("div", class_="company-name") or
+                card.find("span", class_="company-name") or
+                card.find(["div", "span"], class_=lambda c: c and "company" in c) or
+                card.select_one(".company-details p")  # Alternative selector
+            )
+            
+            # Try various link element possibilities
+            link_elem = (
+                card.find("a", class_="job-link") or
+                card.find("a", class_=lambda c: c and ("link" in c or "details" in c)) or
+                card.find("a", href=True)  # Any link
+            )
+            
+            if title_elem and link_elem:
+                # If company not found, use fallback
+                company_text = company_elem.text.strip() if company_elem else "Unknown Company"
+                
+                job_url = link_elem.get("href", "")
+                if job_url.startswith("/"):
+                    job_url = f"https://www.alljobs.co.il{job_url}"
+                    
                 job = Job(
-                    id=link_elem.get("href", "").split("/")[-1],
+                    id=job_url.split("/")[-1] if job_url else title_elem.text.strip(),
                     title=title_elem.text.strip(),
-                    company=company_elem.text.strip(),
-                    url=f"https://www.alljobs.co.il{link_elem.get('href', '')}",
+                    company=company_text,
+                    url=job_url,
                     source=feed.name,
                     date=""
                 )
@@ -503,14 +632,17 @@ class Fetcher:
         return jobs
 
     def _parse_remotive(self, soup, feed):
-        """Parse jobs from remotive.com."""
+        """Parse jobs from remotive.com with robust selectors."""
         jobs = []
         
         # Try multiple possible job card classes
         job_cards = (
             soup.find_all("div", class_="job-card") or
             soup.find_all("li", class_="job-li") or
-            soup.find_all("div", class_="job")
+            soup.find_all("div", class_="job") or
+            soup.find_all("div", class_="ce") or
+            soup.find_all("tr[data-ga-job-row]") or  # Possible table format
+            soup.select(".job-list-item, .jobs-list li, .jobs-list .item")  # More generic css selectors
         )
         
         if job_cards:
@@ -522,37 +654,51 @@ class Fetcher:
                     card.find("h2", class_=lambda c: c and ("job-title" in c or "title" in c)) or
                     card.find("div", class_="position") or
                     card.find(["h2", "h3", "div"], class_=["position", "title"]) or
-                    card.select_one(".job-info h2, .job-info h3")
+                    card.select_one(".job-info h2, .job-info h3, [data-qa='job-title']") or
+                    card.find(["h2", "h3", "h4"])  # Any heading as fallback
                 )
                 
                 # Try multiple company name elements
                 company_elem = (
                     card.find(class_=lambda c: c and ("company-name" in c or "company" in c)) or
                     card.find("div", class_="company") or
-                    card.select_one(".company span")
+                    card.select_one(".company span, [data-qa='company-name']") or
+                    card.find(string=lambda s: s and " at " in s)  # Text like "Position at Company"
                 )
                 
                 # Try to find link
                 link_elem = (
                     card.find("a", class_=lambda c: c and ("job-link" in c or "url" in c)) or
                     card.find("a", href=lambda h: h and ("/remote-jobs/" in h or "/job/" in h)) or
-                    card.find("a")
+                    card.find("a", href=True)  # Any link
                 )
                 
-                if title_elem and company_elem and link_elem:
+                if title_elem:
                     # Get the job URL
-                    job_url = link_elem.get("href", "")
+                    job_url = link_elem.get("href", "") if link_elem else ""
+                    
                     # Add base URL if it's a relative path
-                    if job_url.startswith("/"):
+                    if job_url and job_url.startswith("/"):
                         job_url = f"https://remotive.com{job_url}"
                         
                     # Get job ID from URL
                     job_id = job_url.split("/")[-1] if job_url else ""
                     
+                    # Handle company text extraction
+                    company_text = "Unknown Company"
+                    if company_elem:
+                        if isinstance(company_elem, str):  # Text found with " at Company"
+                            import re
+                            match = re.search(r'at\s+([^•]+)', company_elem)
+                            if match:
+                                company_text = match.group(1).strip()
+                        else:
+                            company_text = company_elem.get_text(strip=True)
+                    
                     job = Job(
-                        id=job_id or job_url,
+                        id=job_id or job_url or title_elem.get_text(strip=True),
                         title=title_elem.get_text(strip=True),
-                        company=company_elem.get_text(strip=True),
+                        company=company_text,
                         url=job_url,
                         source=feed.name,
                         date=""
@@ -560,29 +706,35 @@ class Fetcher:
                     jobs.append(job)
         else:
             # Check if we're on a block page
-            if soup.find(text=lambda t: t and ("captcha" in t.lower() or "blocked" in t.lower() or "rate limit" in t.lower())):
+            if soup.find(text=lambda t: t and any(term in t.lower() for term in ["captcha", "blocked", "rate limit", "security check"])):
                 logger.warning("Remotive is showing a block or CAPTCHA page")
             else:
                 # Try a generic search for any job data
-                titles = soup.find_all(["h2", "h3"], string=lambda s: s and len(s) > 5)
-                for title in titles:
-                    parent = title.parent
-                    company = ""
-                    for sibling in parent.find_all_next():
-                        if "company" in sibling.get("class", []):
-                            company = sibling.text.strip()
-                            break
+                job_sections = soup.select("section, .job-section, .jobs-list > div")
+                for section in job_sections:
+                    title_elem = section.find(["h2", "h3", "h4"])
+                    if not title_elem:
+                        continue
+                        
+                    company = "Unknown Company"
+                    company_elem = section.find(["span", "div"], string=lambda s: s and len(s) < 50)
+                    if company_elem:
+                        company = company_elem.text.strip()
                     
-                    if company:
-                        job = Job(
-                            id=title.text.strip(),
-                            title=title.text.strip(),
-                            company=company,
-                            url="https://remotive.com/remote-jobs/software-dev",
-                            source=feed.name,
-                            date=""
-                        )
-                        jobs.append(job)
+                    link = section.find("a", href=True)
+                    job_url = link["href"] if link else ""
+                    if job_url and job_url.startswith("/"):
+                        job_url = f"https://remotive.com{job_url}"
+                    
+                    job = Job(
+                        id=job_url.split("/")[-1] if job_url else title_elem.text.strip(),
+                        title=title_elem.text.strip(),
+                        company=company,
+                        url=job_url,
+                        source=feed.name,
+                        date=""
+                    )
+                    jobs.append(job)
                 
                 if not jobs:
                     text_content = soup.get_text()[:200]
@@ -591,20 +743,66 @@ class Fetcher:
         return jobs
 
     def _parse_workingnomads(self, soup, feed):
-        """Parse jobs from workingnomads.com."""
+        """Parse jobs from workingnomads.com with robust selectors."""
         jobs = []
-        job_cards = soup.find_all("div", class_="job-card")
-        for card in job_cards:
-            title_elem = card.find("h2", class_="job-title")
-            company_elem = card.find("div", class_="company-name")
-            link_elem = card.find("a", class_="job-link")
+        
+        # Try multiple selectors for job cards
+        job_cards = (
+            soup.find_all("div", class_="job-card") or
+            soup.find_all("div", class_=lambda c: c and "job" in c) or
+            soup.find_all("article", class_=lambda c: c and "job" in c) or
+            soup.select(".job-list .job, .jobs-container .job-item")
+        )
+        
+        if not job_cards:
+            logger.warning(f"No job cards found on WorkingNomads using known selectors")
+            return jobs
             
-            if title_elem and company_elem and link_elem:
+        logger.info(f"Found {len(job_cards)} job cards on WorkingNomads")
+        
+        for card in job_cards:
+            # Try various title element possibilities
+            title_elem = (
+                card.find("h2", class_="job-title") or
+                card.find("h3", class_="job-title") or
+                card.find(["h2", "h3", "h4"], class_=lambda c: c and "title" in c) or
+                card.find("a", class_=lambda c: c and "title" in c) or
+                card.find(["h2", "h3", "h4"])  # Any heading
+            )
+            
+            # Try various company element possibilities
+            company_elem = (
+                card.find("div", class_="company-name") or
+                card.find("span", class_="company-name") or
+                card.find(["div", "span"], class_=lambda c: c and "company" in c) or
+                card.find(string=lambda s: s and " at " in s)
+            )
+            
+            # Try various link element possibilities
+            link_elem = (
+                card.find("a", class_="job-link") or
+                card.find("a", class_=lambda c: c and "link" in c) or
+                card.find("a", href=True)  # Any link
+            )
+            
+            if title_elem and link_elem:
+                # If company not found, use fallback
+                company_text = company_elem.text.strip() if company_elem else "Unknown Company"
+                if isinstance(company_elem, str):
+                    import re
+                    match = re.search(r'at\s+([^•]+)', company_elem)
+                    if match:
+                        company_text = match.group(1).strip()
+                
+                job_url = link_elem.get("href", "")
+                if job_url.startswith("/"):
+                    job_url = f"https://www.workingnomads.com{job_url}"
+                    
                 job = Job(
-                    id=link_elem.get("href", "").split("/")[-1],
+                    id=job_url.split("/")[-1] if job_url else title_elem.text.strip(),
                     title=title_elem.text.strip(),
-                    company=company_elem.text.strip(),
-                    url=f"https://www.workingnomads.com{link_elem.get('href', '')}",
+                    company=company_text,
+                    url=job_url,
                     source=feed.name,
                     date=""
                 )
@@ -612,20 +810,60 @@ class Fetcher:
         return jobs
 
     def _parse_cryptojobslist(self, soup, feed):
-        """Parse jobs from cryptojobslist.com."""
+        """Parse jobs from cryptojobslist.com with robust selectors."""
         jobs = []
-        job_cards = soup.find_all("div", class_="job-card")
-        for card in job_cards:
-            title_elem = card.find("h2", class_="job-title")
-            company_elem = card.find("div", class_="company-name")
-            link_elem = card.find("a", class_="job-link")
+        
+        # Try multiple selectors for job cards
+        job_cards = (
+            soup.find_all("div", class_="job-card") or
+            soup.find_all("div", class_=lambda c: c and "job" in c) or
+            soup.find_all("article", class_=lambda c: c and "job" in c) or
+            soup.select(".job-listing-item, .job-list li")
+        )
+        
+        if not job_cards:
+            logger.warning(f"No job cards found on CryptoJobsList using known selectors")
+            return jobs
             
-            if title_elem and company_elem and link_elem:
+        logger.info(f"Found {len(job_cards)} job cards on CryptoJobsList")
+        
+        for card in job_cards:
+            # Try various title element possibilities
+            title_elem = (
+                card.find("h2", class_="job-title") or
+                card.find("h3", class_="job-title") or
+                card.find(["h2", "h3", "h4"], class_=lambda c: c and "title" in c) or
+                card.find("a", class_=lambda c: c and "title" in c) or
+                card.find(["h2", "h3", "h4"])  # Any heading
+            )
+            
+            # Try various company element possibilities
+            company_elem = (
+                card.find("div", class_="company-name") or
+                card.find("span", class_="company-name") or
+                card.find(["div", "span"], class_=lambda c: c and "company" in c)
+            )
+            
+            # Try various link element possibilities
+            link_elem = (
+                card.find("a", class_="job-link") or
+                card.find("a", class_=lambda c: c and "link" in c) or
+                card.find("a", href=True)  # Any link
+            )
+            
+            if title_elem and link_elem:
+                # If company not found, use fallback
+                company_text = company_elem.text.strip() if company_elem else "Unknown Company"
+                
+                job_url = link_elem.get("href", "")
+                if job_url.startswith("/"):
+                    job_url = f"https://cryptojobslist.com{job_url}"
+                    
                 job = Job(
-                    id=link_elem.get("href", "").split("/")[-1],
+                    id=job_url.split("/")[-1] if job_url else title_elem.text.strip(),
                     title=title_elem.text.strip(),
-                    company=company_elem.text.strip(),
-                    url=f"https://cryptojobslist.com{link_elem.get('href', '')}",
+                    company=company_text,
+                    url=job_url,
                     source=feed.name,
                     date=""
                 )
@@ -633,20 +871,60 @@ class Fetcher:
         return jobs
 
     def _parse_remote3(self, soup, feed):
-        """Parse jobs from remote3.co."""
+        """Parse jobs from remote3.co with robust selectors."""
         jobs = []
-        job_cards = soup.find_all("div", class_="job-card")
-        for card in job_cards:
-            title_elem = card.find("h2", class_="job-title")
-            company_elem = card.find("div", class_="company-name")
-            link_elem = card.find("a", class_="job-link")
+        
+        # Try multiple selectors for job cards
+        job_cards = (
+            soup.find_all("div", class_="job-card") or
+            soup.find_all("div", class_=lambda c: c and "job" in c) or
+            soup.find_all("article", class_=lambda c: c and "job" in c) or
+            soup.select(".job-listing, .jobs-container .job")
+        )
+        
+        if not job_cards:
+            logger.warning(f"No job cards found on Remote3 using known selectors")
+            return jobs
             
-            if title_elem and company_elem and link_elem:
+        logger.info(f"Found {len(job_cards)} job cards on Remote3")
+        
+        for card in job_cards:
+            # Try various title element possibilities
+            title_elem = (
+                card.find("h2", class_="job-title") or
+                card.find("h3", class_="job-title") or
+                card.find(["h2", "h3", "h4"], class_=lambda c: c and "title" in c) or
+                card.find("a", class_=lambda c: c and "title" in c) or
+                card.find(["h2", "h3", "h4"])  # Any heading
+            )
+            
+            # Try various company element possibilities
+            company_elem = (
+                card.find("div", class_="company-name") or
+                card.find("span", class_="company-name") or
+                card.find(["div", "span"], class_=lambda c: c and "company" in c)
+            )
+            
+            # Try various link element possibilities
+            link_elem = (
+                card.find("a", class_="job-link") or
+                card.find("a", class_=lambda c: c and "link" in c) or
+                card.find("a", href=True)  # Any link
+            )
+            
+            if title_elem and link_elem:
+                # If company not found, use fallback
+                company_text = company_elem.text.strip() if company_elem else "Unknown Company"
+                
+                job_url = link_elem.get("href", "")
+                if job_url.startswith("/"):
+                    job_url = f"https://www.remote3.co{job_url}"
+                    
                 job = Job(
-                    id=link_elem.get("href", "").split("/")[-1],
+                    id=job_url.split("/")[-1] if job_url else title_elem.text.strip(),
                     title=title_elem.text.strip(),
-                    company=company_elem.text.strip(),
-                    url=f"https://www.remote3.co{link_elem.get('href', '')}",
+                    company=company_text,
+                    url=job_url,
                     source=feed.name,
                     date=""
                 )
@@ -654,20 +932,60 @@ class Fetcher:
         return jobs
 
     def _parse_mindtel(self, soup, feed):
-        """Parse jobs from mindtel.atsmantra.com."""
+        """Parse jobs from mindtel.atsmantra.com with robust selectors."""
         jobs = []
-        job_cards = soup.find_all("div", class_="job-card")
-        for card in job_cards:
-            title_elem = card.find("h2", class_="job-title")
-            company_elem = card.find("div", class_="company-name")
-            link_elem = card.find("a", class_="job-link")
+        
+        # Try multiple selectors for job cards
+        job_cards = (
+            soup.find_all("div", class_="job-card") or
+            soup.find_all("div", class_=lambda c: c and "job" in c) or
+            soup.find_all("div", class_=lambda c: c and "vacancy" in c) or
+            soup.select(".job-list .job, .vacancy-item")
+        )
+        
+        if not job_cards:
+            logger.warning(f"No job cards found on Mindtel using known selectors")
+            return jobs
             
-            if title_elem and company_elem and link_elem:
+        logger.info(f"Found {len(job_cards)} job cards on Mindtel")
+        
+        for card in job_cards:
+            # Try various title element possibilities
+            title_elem = (
+                card.find("h2", class_="job-title") or
+                card.find("h3", class_="job-title") or
+                card.find(["h2", "h3", "h4"], class_=lambda c: c and "title" in c) or
+                card.find("a", class_=lambda c: c and "title" in c) or
+                card.find(["h2", "h3", "h4"])  # Any heading
+            )
+            
+            # Try various company element possibilities
+            company_elem = (
+                card.find("div", class_="company-name") or
+                card.find("span", class_="company-name") or
+                card.find(["div", "span"], class_=lambda c: c and "company" in c)
+            )
+            
+            # Try various link element possibilities
+            link_elem = (
+                card.find("a", class_="job-link") or
+                card.find("a", class_=lambda c: c and "link" in c) or
+                card.find("a", href=True)  # Any link
+            )
+            
+            if title_elem and link_elem:
+                # If company not found, use fallback - for Mindtel, the company is often Mindtel itself
+                company_text = company_elem.text.strip() if company_elem else "Mindtel"
+                
+                job_url = link_elem.get("href", "")
+                if job_url.startswith("/"):
+                    job_url = f"https://mindtel.atsmantra.com{job_url}"
+                    
                 job = Job(
-                    id=link_elem.get("href", "").split("/")[-1],
+                    id=job_url.split("/")[-1] if job_url else title_elem.text.strip(),
                     title=title_elem.text.strip(),
-                    company=company_elem.text.strip(),
-                    url=f"https://mindtel.atsmantra.com{link_elem.get('href', '')}",
+                    company=company_text,
+                    url=job_url,
                     source=feed.name,
                     date=""
                 )
@@ -675,20 +993,60 @@ class Fetcher:
         return jobs
 
     def _parse_nodesk(self, soup, feed):
-        """Parse jobs from nodesk.co."""
+        """Parse jobs from nodesk.co with robust selectors."""
         jobs = []
-        job_cards = soup.find_all("div", class_="job-card")
-        for card in job_cards:
-            title_elem = card.find("h2", class_="job-title")
-            company_elem = card.find("div", class_="company-name")
-            link_elem = card.find("a", class_="job-link")
+        
+        # Try multiple selectors for job cards
+        job_cards = (
+            soup.find_all("div", class_="job-card") or
+            soup.find_all("div", class_=lambda c: c and "job" in c) or
+            soup.find_all("article", class_=lambda c: c and "job" in c) or
+            soup.select(".job-list .job, .jobs-container .job-item")
+        )
+        
+        if not job_cards:
+            logger.warning(f"No job cards found on Nodesk using known selectors")
+            return jobs
             
-            if title_elem and company_elem and link_elem:
+        logger.info(f"Found {len(job_cards)} job cards on Nodesk")
+        
+        for card in job_cards:
+            # Try various title element possibilities
+            title_elem = (
+                card.find("h2", class_="job-title") or
+                card.find("h3", class_="job-title") or
+                card.find(["h2", "h3", "h4"], class_=lambda c: c and "title" in c) or
+                card.find("a", class_=lambda c: c and "title" in c) or
+                card.find(["h2", "h3", "h4"])  # Any heading
+            )
+            
+            # Try various company element possibilities
+            company_elem = (
+                card.find("div", class_="company-name") or
+                card.find("span", class_="company-name") or
+                card.find(["div", "span"], class_=lambda c: c and "company" in c)
+            )
+            
+            # Try various link element possibilities
+            link_elem = (
+                card.find("a", class_="job-link") or
+                card.find("a", class_=lambda c: c and "link" in c) or
+                card.find("a", href=True)  # Any link
+            )
+            
+            if title_elem and link_elem:
+                # If company not found, use fallback
+                company_text = company_elem.text.strip() if company_elem else "Unknown Company"
+                
+                job_url = link_elem.get("href", "")
+                if job_url.startswith("/"):
+                    job_url = f"https://nodesk.co{job_url}"
+                    
                 job = Job(
-                    id=link_elem.get("href", "").split("/")[-1],
+                    id=job_url.split("/")[-1] if job_url else title_elem.text.strip(),
                     title=title_elem.text.strip(),
-                    company=company_elem.text.strip(),
-                    url=f"https://nodesk.co{link_elem.get('href', '')}",
+                    company=company_text,
+                    url=job_url,
                     source=feed.name,
                     date=""
                 )
@@ -696,20 +1054,60 @@ class Fetcher:
         return jobs
 
     def _parse_cryptocurrencyjobs(self, soup, feed):
-        """Parse jobs from cryptocurrencyjobs.co."""
+        """Parse jobs from cryptocurrencyjobs.co with robust selectors."""
         jobs = []
-        job_cards = soup.find_all("div", class_="job-card")
-        for card in job_cards:
-            title_elem = card.find("h2", class_="job-title")
-            company_elem = card.find("div", class_="company-name")
-            link_elem = card.find("a", class_="job-link")
+        
+        # Try multiple selectors for job cards
+        job_cards = (
+            soup.find_all("div", class_="job-card") or
+            soup.find_all("div", class_=lambda c: c and "job" in c) or
+            soup.find_all("article", class_=lambda c: c and "job" in c) or
+            soup.select(".job-listing, .jobs-container .job-item")
+        )
+        
+        if not job_cards:
+            logger.warning(f"No job cards found on CryptocurrencyJobs using known selectors")
+            return jobs
             
-            if title_elem and company_elem and link_elem:
+        logger.info(f"Found {len(job_cards)} job cards on CryptocurrencyJobs")
+        
+        for card in job_cards:
+            # Try various title element possibilities
+            title_elem = (
+                card.find("h2", class_="job-title") or
+                card.find("h3", class_="job-title") or
+                card.find(["h2", "h3", "h4"], class_=lambda c: c and "title" in c) or
+                card.find("a", class_=lambda c: c and "title" in c) or
+                card.find(["h2", "h3", "h4"])  # Any heading
+            )
+            
+            # Try various company element possibilities
+            company_elem = (
+                card.find("div", class_="company-name") or
+                card.find("span", class_="company-name") or
+                card.find(["div", "span"], class_=lambda c: c and "company" in c)
+            )
+            
+            # Try various link element possibilities
+            link_elem = (
+                card.find("a", class_="job-link") or
+                card.find("a", class_=lambda c: c and "link" in c) or
+                card.find("a", href=True)  # Any link
+            )
+            
+            if title_elem and link_elem:
+                # If company not found, use fallback
+                company_text = company_elem.text.strip() if company_elem else "Unknown Company"
+                
+                job_url = link_elem.get("href", "")
+                if job_url.startswith("/"):
+                    job_url = f"https://cryptocurrencyjobs.co{job_url}"
+                    
                 job = Job(
-                    id=link_elem.get("href", "").split("/")[-1],
+                    id=job_url.split("/")[-1] if job_url else title_elem.text.strip(),
                     title=title_elem.text.strip(),
-                    company=company_elem.text.strip(),
-                    url=f"https://cryptocurrencyjobs.co{link_elem.get('href', '')}",
+                    company=company_text,
+                    url=job_url,
                     source=feed.name,
                     date=""
                 )
@@ -717,20 +1115,71 @@ class Fetcher:
         return jobs
 
     def _parse_nodesk_substack(self, soup, feed):
-        """Parse jobs from nodesk.substack.com."""
+        """Parse jobs from nodesk.substack.com with robust selectors."""
         jobs = []
-        job_cards = soup.find_all("div", class_="job-card")
-        for card in job_cards:
-            title_elem = card.find("h2", class_="job-title")
-            company_elem = card.find("div", class_="company-name")
-            link_elem = card.find("a", class_="job-link")
+        
+        # Try multiple selectors for job cards
+        job_cards = (
+            soup.find_all("div", class_="job-card") or
+            soup.find_all("div", class_=lambda c: c and "job" in c) or
+            soup.find_all("article", class_=lambda c: c and ("post" in c or "job" in c)) or
+            soup.select(".post-preview, .job-listing, .job")
+        )
+        
+        if not job_cards:
+            logger.warning(f"No job cards found on Nodesk Substack using known selectors")
+            return jobs
             
-            if title_elem and company_elem and link_elem:
+        logger.info(f"Found {len(job_cards)} job cards on Nodesk Substack")
+        
+        for card in job_cards:
+            # Try various title element possibilities
+            title_elem = (
+                card.find("h2", class_="job-title") or
+                card.find("h3", class_="job-title") or
+                card.find(["h2", "h3", "h4"], class_=lambda c: c and ("title" in c or "post" in c)) or
+                card.find("a", class_=lambda c: c and ("title" in c or "post" in c)) or
+                card.find(["h2", "h3", "h4"])  # Any heading
+            )
+            
+            # Try various company element possibilities
+            company_elem = (
+                card.find("div", class_="company-name") or
+                card.find("span", class_="company-name") or
+                card.find(["div", "span"], class_=lambda c: c and "company" in c) or
+                # For substack, we might need to extract from the title
+                None
+            )
+            
+            # Try various link element possibilities
+            link_elem = (
+                card.find("a", class_="job-link") or
+                card.find("a", class_=lambda c: c and "link" in c) or
+                card.find("a", href=True)  # Any link
+            )
+            
+            if title_elem and link_elem:
+                # For substack, try to extract company from title if not found
+                company_text = "Unknown Company"
+                if company_elem:
+                    company_text = company_elem.text.strip()
+                else:
+                    # Check if title contains company info (e.g., "Job Title at Company")
+                    title_text = title_elem.text.strip()
+                    import re
+                    match = re.search(r'at\s+([^|•]+)', title_text)
+                    if match:
+                        company_text = match.group(1).strip()
+                
+                job_url = link_elem.get("href", "")
+                if job_url.startswith("/"):
+                    job_url = f"https://nodesk.substack.com{job_url}"
+                    
                 job = Job(
-                    id=link_elem.get("href", "").split("/")[-1],
+                    id=job_url.split("/")[-1] if job_url else title_elem.text.strip(),
                     title=title_elem.text.strip(),
-                    company=company_elem.text.strip(),
-                    url=f"https://nodesk.substack.com{link_elem.get('href', '')}",
+                    company=company_text,
+                    url=job_url,
                     source=feed.name,
                     date=""
                 )
@@ -738,20 +1187,60 @@ class Fetcher:
         return jobs
 
     def _parse_remotehabits(self, soup, feed):
-        """Parse jobs from remotehabits.com."""
+        """Parse jobs from remotehabits.com with robust selectors."""
         jobs = []
-        job_cards = soup.find_all("div", class_="job-card")
-        for card in job_cards:
-            title_elem = card.find("h2", class_="job-title")
-            company_elem = card.find("div", class_="company-name")
-            link_elem = card.find("a", class_="job-link")
+        
+        # Try multiple selectors for job cards
+        job_cards = (
+            soup.find_all("div", class_="job-card") or
+            soup.find_all("div", class_=lambda c: c and "job" in c) or
+            soup.find_all("article", class_=lambda c: c and "job" in c) or
+            soup.select(".job-listing, .job-preview, .job")
+        )
+        
+        if not job_cards:
+            logger.warning(f"No job cards found on RemoteHabits using known selectors")
+            return jobs
             
-            if title_elem and company_elem and link_elem:
+        logger.info(f"Found {len(job_cards)} job cards on RemoteHabits")
+        
+        for card in job_cards:
+            # Try various title element possibilities
+            title_elem = (
+                card.find("h2", class_="job-title") or
+                card.find("h3", class_="job-title") or
+                card.find(["h2", "h3", "h4"], class_=lambda c: c and "title" in c) or
+                card.find("a", class_=lambda c: c and "title" in c) or
+                card.find(["h2", "h3", "h4"])  # Any heading
+            )
+            
+            # Try various company element possibilities
+            company_elem = (
+                card.find("div", class_="company-name") or
+                card.find("span", class_="company-name") or
+                card.find(["div", "span"], class_=lambda c: c and "company" in c)
+            )
+            
+            # Try various link element possibilities
+            link_elem = (
+                card.find("a", class_="job-link") or
+                card.find("a", class_=lambda c: c and "link" in c) or
+                card.find("a", href=True)  # Any link
+            )
+            
+            if title_elem and link_elem:
+                # If company not found, use fallback
+                company_text = company_elem.text.strip() if company_elem else "Unknown Company"
+                
+                job_url = link_elem.get("href", "")
+                if job_url.startswith("/"):
+                    job_url = f"https://remotehabits.com{job_url}"
+                    
                 job = Job(
-                    id=link_elem.get("href", "").split("/")[-1],
+                    id=job_url.split("/")[-1] if job_url else title_elem.text.strip(),
                     title=title_elem.text.strip(),
-                    company=company_elem.text.strip(),
-                    url=f"https://remotehabits.com{link_elem.get('href', '')}",
+                    company=company_text,
+                    url=job_url,
                     source=feed.name,
                     date=""
                 )
@@ -759,20 +1248,60 @@ class Fetcher:
         return jobs
 
     def _parse_jobspresso(self, soup, feed):
-        """Parse jobs from jobspresso.co."""
+        """Parse jobs from jobspresso.co with robust selectors."""
         jobs = []
-        job_cards = soup.find_all("div", class_="job-card")
-        for card in job_cards:
-            title_elem = card.find("h2", class_="job-title")
-            company_elem = card.find("div", class_="company-name")
-            link_elem = card.find("a", class_="job-link")
+        
+        # Try multiple selectors for job cards
+        job_cards = (
+            soup.find_all("div", class_="job-card") or
+            soup.find_all("div", class_=lambda c: c and "job" in c) or
+            soup.find_all("article", class_=lambda c: c and "job" in c) or
+            soup.select(".job-listing, .jobs .job-item")
+        )
+        
+        if not job_cards:
+            logger.warning(f"No job cards found on Jobspresso using known selectors")
+            return jobs
             
-            if title_elem and company_elem and link_elem:
+        logger.info(f"Found {len(job_cards)} job cards on Jobspresso")
+        
+        for card in job_cards:
+            # Try various title element possibilities
+            title_elem = (
+                card.find("h2", class_="job-title") or
+                card.find("h3", class_="job-title") or
+                card.find(["h2", "h3", "h4"], class_=lambda c: c and "title" in c) or
+                card.find("a", class_=lambda c: c and "title" in c) or
+                card.find(["h2", "h3", "h4"])  # Any heading
+            )
+            
+            # Try various company element possibilities
+            company_elem = (
+                card.find("div", class_="company-name") or
+                card.find("span", class_="company-name") or
+                card.find(["div", "span"], class_=lambda c: c and "company" in c)
+            )
+            
+            # Try various link element possibilities
+            link_elem = (
+                card.find("a", class_="job-link") or
+                card.find("a", class_=lambda c: c and "link" in c) or
+                card.find("a", href=True)  # Any link
+            )
+            
+            if title_elem and link_elem:
+                # If company not found, use fallback
+                company_text = company_elem.text.strip() if company_elem else "Unknown Company"
+                
+                job_url = link_elem.get("href", "")
+                if job_url.startswith("/"):
+                    job_url = f"https://jobspresso.co{job_url}"
+                    
                 job = Job(
-                    id=link_elem.get("href", "").split("/")[-1],
+                    id=job_url.split("/")[-1] if job_url else title_elem.text.strip(),
                     title=title_elem.text.strip(),
-                    company=company_elem.text.strip(),
-                    url=f"https://jobspresso.co{link_elem.get('href', '')}",
+                    company=company_text,
+                    url=job_url,
                     source=feed.name,
                     date=""
                 )
@@ -780,41 +1309,61 @@ class Fetcher:
         return jobs
 
     def _parse_weworkremotely_support(self, soup, feed):
-        """Parse jobs from weworkremotely.com customer support section."""
+        """Parse jobs from weworkremotely.com customer support section with robust selectors."""
         jobs = []
-        job_cards = soup.find_all("div", class_="job-card")
-        for card in job_cards:
-            title_elem = card.find("h2", class_="job-title")
-            company_elem = card.find("div", class_="company-name")
-            link_elem = card.find("a", class_="job-link")
+        
+        # Try multiple selectors for job cards
+        job_cards = (
+            soup.find_all("div", class_="job-card") or
+            soup.find_all("div", class_=lambda c: c and "job" in c) or
+            soup.find_all("li", class_=lambda c: c and "feature" in c) or
+            soup.select(".jobs .job, article.job, .feature")
+        )
+        
+        if not job_cards:
+            logger.warning(f"No job cards found on WeWorkRemotely using known selectors")
+            return jobs
             
-            if title_elem and company_elem and link_elem:
-                job = Job(
-                    id=link_elem.get("href", "").split("/")[-1],
-                    title=title_elem.text.strip(),
-                    company=company_elem.text.strip(),
-                    url=f"https://weworkremotely.com{link_elem.get('href', '')}",
-                    source=feed.name,
-                    date=""
-                )
-                jobs.append(job)
-        return jobs
-
-    def _parse_seek(self, soup, feed):
-        """Parse jobs from seek.com."""
-        jobs = []
-        job_cards = soup.find_all("div", class_="job-card")
+        logger.info(f"Found {len(job_cards)} job cards on WeWorkRemotely")
+        
         for card in job_cards:
-            title_elem = card.find("h2", class_="job-title")
-            company_elem = card.find("div", class_="company-name")
-            link_elem = card.find("a", class_="job-link")
+            # Try various title element possibilities
+            title_elem = (
+                card.find("h2", class_="job-title") or
+                card.find("h3", class_="job-title") or
+                card.find("span", class_="title") or
+                card.find(["h2", "h3", "h4", "span"], class_=lambda c: c and "title" in c) or
+                card.find("a", class_=lambda c: c and "title" in c) or
+                card.find(["h2", "h3", "h4", "span"])  # Any heading
+            )
             
-            if title_elem and company_elem and link_elem:
+            # Try various company element possibilities
+            company_elem = (
+                card.find("div", class_="company-name") or
+                card.find("span", class_="company") or
+                card.find(["div", "span"], class_=lambda c: c and "company" in c)
+            )
+            
+            # Try various link element possibilities
+            link_elem = (
+                card.find("a", class_="job-link") or
+                card.find("a", class_=lambda c: c and "link" in c) or
+                card.find("a", href=True)  # Any link
+            )
+            
+            if title_elem and link_elem:
+                # If company not found, use fallback
+                company_text = company_elem.text.strip() if company_elem else "Unknown Company"
+                
+                job_url = link_elem.get("href", "")
+                if job_url.startswith("/"):
+                    job_url = f"https://weworkremotely.com{job_url}"
+                    
                 job = Job(
-                    id=link_elem.get("href", "").split("/")[-1],
+                    id=job_url.split("/")[-1] if job_url else title_elem.text.strip(),
                     title=title_elem.text.strip(),
-                    company=company_elem.text.strip(),
-                    url=f"https://www.seek.com{link_elem.get('href', '')}",
+                    company=company_text,
+                    url=job_url,
                     source=feed.name,
                     date=""
                 )
@@ -842,11 +1391,45 @@ class Fetcher:
                 # Human-like behavior
                 time.sleep(random.uniform(2, 4))  # Initial wait like a human
                 
-                # Scroll more naturally
-                for _ in range(3):
-                    # Scroll down with natural speed
-                    page.evaluate("window.scrollTo({top: window.scrollY + 400, behavior: 'smooth'})")
-                    time.sleep(random.uniform(1.5, 3))
+                # Scroll more naturally (diagonal movements, different speeds)
+                total_height = page.evaluate("document.body.scrollHeight")
+                viewport_height = page.evaluate("window.innerHeight")
+                scroll_positions = []
+                
+                # Calculate a few natural scroll positions (not perfectly equal)
+                for i in range(1, min(5, int(total_height/viewport_height) + 1)):
+                    target_position = int(i * viewport_height * random.uniform(0.8, 1.0))
+                    if target_position > total_height:
+                        target_position = total_height
+                    scroll_positions.append(target_position)
+                
+                # Execute the scrolls with natural timing
+                for position in scroll_positions:
+                    # Random slight horizontal scroll to appear more human
+                    horizontal_jitter = random.randint(-10, 10)
+                    # Scroll with smooth animation
+                    page.evaluate(f"""
+                        window.scrollTo({{
+                            left: {horizontal_jitter},
+                            top: {position},
+                            behavior: 'smooth'
+                        }});
+                    """)
+                    # Wait a bit after each scroll
+                    time.sleep(random.uniform(1.0, 2.5))
+                
+                # Perform a few random mouse movements to simulate human behavior
+                for _ in range(random.randint(2, 4)):
+                    try:
+                        x = random.randint(100, 800)
+                        y = random.randint(100, 600)
+                        page.mouse.move(x, y)
+                        time.sleep(random.uniform(0.3, 1.0))
+                    except Exception:
+                        pass  # Ignore mouse movement failures
+                
+                # Wait for potential infinite scroll or lazy loading to complete
+                time.sleep(random.uniform(1.5, 3.0))
                 
                 # Save the HTML for debugging regardless of what happens next
                 html = page.content()
@@ -859,7 +1442,11 @@ class Fetcher:
                 # Wait for the main job selector to appear with broader selector options
                 selector_map = {
                     "indeed": "div.job_seen_beacon, div.jobsearch-ResultsList, div.tapItem, li.result",
-                    "remotive": "div.job-card, li.job-li, div.job, div.ce",  # Adding more potential selectors
+                    "remotive": "div.job-card, li.job-li, div.job, div.ce",
+                    "remoteok": "tr.job, div.job-container",
+                    "workingnomads": "div.job-card, div.job-list",
+                    "cryptojobslist": "div.job-card, div.job-listing-item",
+                    "jobspresso": "div.job-card, article.job",
                 }
                 selector = selector_map.get(feed.parser)
                 if selector:
@@ -873,6 +1460,10 @@ class Fetcher:
                         
                     except Exception as e:
                         logger.warning(f"Selector {selector} not found for {feed.name}: {e}")
+                        
+                # Check for CAPTCHA or security challenges
+                if self._detect_security_challenge(page):
+                    logger.warning(f"Security challenge detected on {feed.name}")
                 
             except Exception as e:
                 logger.error(f"Failed to fetch {feed.name} with headless browser: {e}")
@@ -891,9 +1482,65 @@ class Fetcher:
         parser_map = {
             "indeed": self._parse_indeed,
             "remotive": self._parse_remotive,
+            "remoteok": self._parse_remoteok,
+            "workingnomads": self._parse_workingnomads,
+            "cryptojobslist": self._parse_cryptojobslist,
+            "jobspresso": self._parse_jobspresso,
         }
         parser = parser_map.get(feed.parser)
         if parser:
             return parser(soup, feed)
         else:
-            raise ValueError(f"No parser implemented for {feed.parser}") 
+            raise ValueError(f"No parser implemented for {feed.parser}")
+            
+    def _detect_security_challenge(self, page):
+        """Check if the page contains a security challenge or CAPTCHA.
+        
+        Args:
+            page: Playwright page object
+            
+        Returns:
+            bool: True if a security challenge is detected
+        """
+        try:
+            # Check for common CAPTCHA or security challenge indicators
+            challenge_indicators = [
+                "captcha", 
+                "security check", 
+                "bot check", 
+                "robot", 
+                "human verification",
+                "prove you're human",
+                "verify you are a human",
+                "unusual activity",
+                "security challenge",
+                "recaptcha"
+            ]
+            
+            # Check body text for these indicators
+            body_text = page.evaluate("""() => { 
+                return document.body.innerText.toLowerCase(); 
+            }""")
+            
+            for indicator in challenge_indicators:
+                if indicator in body_text:
+                    return True
+            
+            # Check for known CAPTCHA elements
+            captcha_selectors = [
+                "iframe[src*='captcha']",
+                "iframe[src*='recaptcha']",
+                "div.g-recaptcha",
+                "div.h-captcha",
+                "div[class*='captcha']",
+                "input[name*='captcha']"
+            ]
+            
+            for selector in captcha_selectors:
+                if page.query_selector(selector):
+                    return True
+            
+            return False
+        except Exception as e:
+            logger.warning(f"Error checking for security challenge: {e}")
+            return False 
