@@ -1,5 +1,5 @@
 """Feed fetching functionality."""
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Union
 import requests
 import feedparser
 import json
@@ -16,6 +16,8 @@ import time
 import pathlib
 import threading
 import atexit
+from datetime import datetime, timedelta
+from requests.exceptions import RequestException
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +25,12 @@ logger = logging.getLogger(__name__)
 class BrowserPool:
     """Manages a pool of browser contexts for headless fetching."""
     
-    def __init__(self, max_contexts=3):
+    def __init__(self, max_contexts=3, test_mode=False):
         """Initialize the browser pool.
         
         Args:
             max_contexts: Maximum number of browser contexts to keep in the pool
+            test_mode: Set to True for testing to avoid blocking operations
         """
         self.max_contexts = max_contexts
         self.contexts = {}  # domain -> (context, last_used_time)
@@ -35,6 +38,7 @@ class BrowserPool:
         self.playwright = None
         self.browser = None
         self._initialized = False
+        self.test_mode = test_mode
         
     def initialize(self):
         """Initialize the browser if not already initialized."""
@@ -127,7 +131,17 @@ class BrowserPool:
         Args:
             domain: Domain to save cookies for
         """
-        with self.lock:
+        # Skip in test mode to avoid blocking
+        if self.test_mode:
+            return
+            
+        # Use a short timeout to avoid deadlocks in tests
+        lock_acquired = self.lock.acquire(timeout=0.5)
+        if not lock_acquired:
+            logger.warning(f"Could not acquire lock to save cookies for {domain}")
+            return
+            
+        try:
             if domain in self.contexts:
                 context, _ = self.contexts[domain]
                 cookies_dir = pathlib.Path("cookies")
@@ -141,6 +155,8 @@ class BrowserPool:
                     logger.info(f"Saved cookies for {domain}")
                 except Exception as e:
                     logger.warning(f"Failed to save cookies for {domain}: {e}")
+        finally:
+            self.lock.release()
     
     def _cleanup_old_contexts(self):
         """Clean up old contexts if we have too many."""
@@ -163,10 +179,26 @@ class BrowserPool:
         if not self._initialized:
             return
             
-        with self.lock:
+        # Use a short timeout to avoid deadlocks in tests
+        lock_acquired = self.lock.acquire(timeout=0.5)
+        if not lock_acquired:
+            logger.warning("Could not acquire lock for browser pool cleanup - forcing cleanup")
+            # Force cleanup of browser even if lock can't be acquired
+            try:
+                if self.browser:
+                    self.browser.close()
+                if self.playwright:
+                    self.playwright.stop()
+            except Exception as e:
+                logger.warning(f"Failed to force close browser: {e}")
+            self._initialized = False
+            return
+            
+        try:
             for domain, (context, _) in list(self.contexts.items()):
                 try:
-                    self.save_cookies(domain)
+                    if not self.test_mode:
+                        self.save_cookies(domain)
                     context.close()
                 except Exception as e:
                     logger.warning(f"Failed to close context for {domain}: {e}")
@@ -182,6 +214,8 @@ class BrowserPool:
                 logger.warning(f"Failed to close browser or playwright: {e}")
             
             self._initialized = False
+        finally:
+            self.lock.release()
 
 # Create global browser pool
 browser_pool = BrowserPool(max_contexts=3)
@@ -483,19 +517,23 @@ class Fetcher:
                     if match:
                         job_id = match.group(1)
             
-            if title_elem and company_elem:
+            if title_elem:  # Only require title element
                 job_url = f"https://remoteok.com/remote-jobs/{job_id}" if job_id else ""
                 
                 # If no job_id was found, try to get complete URL from a link
+                link = card.find("a", href=True)
                 if not job_url and link and link.get("href", ""):
                     job_url = link["href"]
                     if job_url.startswith("/"):
                         job_url = f"https://remoteok.com{job_url}"
                 
+                # Use company name if available, otherwise "Unknown Company"
+                company_name = company_elem.text.strip() if company_elem else "Unknown Company"
+                
                 job = Job(
                     id=job_id or title_elem.text.strip(),  # Fallback to title as ID if needed
                     title=title_elem.text.strip(),
-                    company=company_elem.text.strip(),
+                    company=company_name,
                     url=job_url,
                     source=feed.name,
                     date=""

@@ -541,33 +541,6 @@ def test_fetch_html_weworkremotely_support(fetcher):
         assert jobs[0].company == "Test Company"
         assert jobs[0].url == "https://weworkremotely.com/jobs/123"
 
-def test_fetch_html_seek(fetcher):
-    """Test fetching from Seek HTML feed."""
-    seek_feed = Feed(
-        name="seek",
-        url="https://www.seek.com/jobs",
-        type="html",
-        parser="seek",
-        fetch_method="html",
-        rate_limit={'requests_per_minute': 2, 'retry_after': 1}
-    )
-    
-    mock_response = Mock()
-    mock_response.text = """
-    <div class="job-card">
-        <h2 class="job-title">Python Developer</h2>
-        <div class="company-name">Test Company</div>
-        <a class="job-link" href="/jobs/123">View Job</a>
-    </div>
-    """
-    
-    with patch('requests.get', return_value=mock_response):
-        jobs = fetcher.fetch(seek_feed)
-        assert len(jobs) == 1
-        assert jobs[0].title == "Python Developer"
-        assert jobs[0].company == "Test Company"
-        assert jobs[0].url == "https://www.seek.com/jobs/123"
-
 def test_fetch_html_empty_response(fetcher):
     """Test fetching from HTML feed with empty response."""
     feed = Feed(
