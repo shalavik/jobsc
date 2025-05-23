@@ -10,6 +10,7 @@ from .models import Feed, Job
 from .fetchers import Fetcher
 from .database import Database
 from .filters import create_filter_from_config
+from .smart_matcher import create_smart_matcher
 from .web.app import run_server
 from .config import get_config
 import sqlite3
@@ -42,7 +43,9 @@ def list_feeds():
 @click.option('--feed', help='Specific feed to fetch from')
 @click.option('--limit', type=int, default=100, help='Maximum number of jobs to fetch')
 @click.option('--apply-filters/--no-filters', default=True, help='Apply configured filters')
-def fetch(feed: str, limit: int, apply_filters: bool):
+@click.option('--smart-filter/--no-smart-filter', default=None, help='Apply smart filtering to only save relevant jobs (overrides config)')
+@click.option('--min-score', type=int, default=None, help='Minimum relevance score for smart filtering (overrides config)')
+def fetch(feed: str, limit: int, apply_filters: bool, smart_filter: Optional[bool], min_score: Optional[int]):
     """Fetch jobs from configured feeds."""
     config = get_config()
     fetcher = Fetcher()
@@ -50,6 +53,28 @@ def fetch(feed: str, limit: int, apply_filters: bool):
     job_filter = None
     if apply_filters and 'filters' in config:
         job_filter = create_filter_from_config(config['filters'])
+    
+    # Get smart filtering configuration from config or CLI options
+    smart_config = config.get('smart_filtering', {})
+    if smart_filter is None:
+        smart_filter = smart_config.get('enabled', True)  # Default to enabled
+    if min_score is None:
+        min_score = smart_config.get('min_score', 1)  # Default min score
+    
+    # Initialize smart matcher if smart filtering is enabled
+    smart_matcher = None
+    if smart_filter:
+        # Use categories from config if specified
+        categories = smart_config.get('categories', [])
+        if categories:
+            smart_matcher = create_smart_matcher(categories)
+            console.print(f"[blue]Smart filtering enabled (min score: {min_score}, categories: {', '.join(categories)})[/blue]")
+        else:
+            smart_matcher = create_smart_matcher()
+            console.print(f"[blue]Smart filtering enabled (min score: {min_score}, all categories)[/blue]")
+    else:
+        console.print("[yellow]Smart filtering disabled[/yellow]")
+    
     feeds_to_fetch = [
         Feed(**f) for f in config['feeds']
         if not feed or f['name'] == feed
@@ -59,21 +84,71 @@ def fetch(feed: str, limit: int, apply_filters: bool):
         return
     with Progress() as progress:
         task = progress.add_task("[cyan]Fetching jobs...", total=len(feeds_to_fetch))
-        for feed in feeds_to_fetch:
+        total_fetched = 0
+        total_relevant = 0
+        total_added = 0
+        
+        for feed_obj in feeds_to_fetch:
             try:
-                console.print(f"\n[blue]Fetching from {feed.name}...[/blue]")
-                jobs = fetcher.fetch(feed)
+                console.print(f"\n[blue]Fetching from {feed_obj.name}...[/blue]")
+                jobs = fetcher.fetch(feed_obj)
+                
                 if jobs:
+                    total_fetched += len(jobs)
+                    console.print(f"[green]Fetched {len(jobs)} jobs from {feed_obj.name}[/green]")
+                    
+                    # Apply configured filters first
                     if job_filter:
                         jobs = job_filter.filter_jobs(jobs)
-                        console.print(f"[yellow]Filtered to {len(jobs)} jobs[/yellow]")
-                    added = db.add_jobs(jobs[:limit])
-                    console.print(f"[green]Added {added} jobs from {feed.name}[/green]")
+                        console.print(f"[yellow]Filtered to {len(jobs)} jobs after applying configured filters[/yellow]")
+                    
+                    # Apply smart filtering before adding to database
+                    if smart_matcher:
+                        original_count = len(jobs)
+                        jobs = smart_matcher.filter_jobs(jobs, min_score=min_score)
+                        total_relevant += len(jobs)
+                        
+                        if len(jobs) < original_count:
+                            filtered_out = original_count - len(jobs)
+                            console.print(f"[magenta]Smart filter: kept {len(jobs)} relevant jobs, filtered out {filtered_out} irrelevant jobs[/magenta]")
+                        else:
+                            console.print(f"[magenta]Smart filter: all {len(jobs)} jobs are relevant[/magenta]")
+                        
+                        # Show what categories matched
+                        if jobs:
+                            category_counts = {}
+                            for job in jobs:
+                                scores = smart_matcher.get_match_score(job)
+                                for category, score in scores.items():
+                                    if score > 0:
+                                        category_counts[category] = category_counts.get(category, 0) + 1
+                            
+                            if category_counts:
+                                category_summary = ", ".join([f"{cat}: {count}" for cat, count in category_counts.items()])
+                                console.print(f"[cyan]  Categories matched: {category_summary}[/cyan]")
+                    
+                    # Add to database
+                    if jobs:
+                        added = db.add_jobs(jobs[:limit])
+                        total_added += added
+                        console.print(f"[green]Added {added} jobs to database[/green]")
+                    else:
+                        console.print(f"[yellow]No relevant jobs to add from {feed_obj.name}[/yellow]")
                 else:
-                    console.print(f"[yellow]No jobs found in {feed.name}[/yellow]")
+                    console.print(f"[yellow]No jobs found in {feed_obj.name}[/yellow]")
             except Exception as e:
-                console.print(f"[red]Error fetching from {feed.name}: {str(e)}[/red]")
+                console.print(f"[red]Error fetching from {feed_obj.name}: {str(e)}[/red]")
             progress.advance(task)
+        
+        # Show summary
+        console.print(f"\n[bold green]Fetch Summary:[/bold green]")
+        console.print(f"  Total jobs fetched: {total_fetched}")
+        if smart_matcher:
+            console.print(f"  Relevant jobs after smart filtering: {total_relevant}")
+            if total_fetched > 0:
+                relevance_rate = (total_relevant / total_fetched) * 100
+                console.print(f"  Relevance rate: {relevance_rate:.1f}%")
+        console.print(f"  Jobs added to database: {total_added}")
 
 @cli.command()
 @click.option('--company', help='Filter by company name')
@@ -207,6 +282,124 @@ def migrate():
     conn.commit()
     conn.close()
     console.print("[green]Database migration complete.[/green]")
+
+@cli.command('smart-search')
+@click.option('--categories', help='Comma-separated list of categories to search (customer_support, technical_support, specialist_roles, compliance_analysis, operations)')
+@click.option('--min-score', type=int, default=1, help='Minimum relevance score (1-5)')
+@click.option('--limit', type=int, default=20, help='Maximum number of results to show')
+@click.option('--show-keywords', is_flag=True, help='Show matching keywords for each job')
+def smart_search(categories: Optional[str], min_score: int, limit: int, show_keywords: bool):
+    """Search for jobs using smart title matching based on your interests."""
+    db = Database()
+    smart_matcher = create_smart_matcher()
+    
+    # Parse categories if provided
+    category_list = None
+    if categories:
+        category_list = [cat.strip() for cat in categories.split(',')]
+        # Validate categories
+        valid_categories = list(smart_matcher.INTERESTED_KEYWORDS.keys())
+        invalid_categories = [cat for cat in category_list if cat not in valid_categories]
+        if invalid_categories:
+            console.print(f"[red]Invalid categories: {invalid_categories}[/red]")
+            console.print(f"[yellow]Valid categories: {valid_categories}[/yellow]")
+            return
+    
+    # Get all jobs from database
+    console.print("[blue]Searching for relevant jobs...[/blue]")
+    all_jobs = db.search_jobs(filters={}, limit=1000)  # Get more jobs to filter through
+    
+    if not all_jobs:
+        console.print("[yellow]No jobs found in the database[/yellow]")
+        return
+    
+    # Convert to Job objects (assuming database returns JobModel objects)
+    job_objects = []
+    for db_job in all_jobs:
+        job = Job(
+            id=db_job.id,
+            title=db_job.title,
+            company=db_job.company,
+            url=db_job.url,
+            source=db_job.source,
+            date=db_job.date.isoformat() if db_job.date else ""
+        )
+        # Add additional fields if they exist
+        if hasattr(db_job, 'description'):
+            job.description = db_job.description
+        if hasattr(db_job, 'location'):
+            job.location = db_job.location
+        if hasattr(db_job, 'salary'):
+            job.salary = db_job.salary
+        if hasattr(db_job, 'job_type'):
+            job.job_type = db_job.job_type
+        if hasattr(db_job, 'experience_level'):
+            job.experience_level = db_job.experience_level
+        if hasattr(db_job, 'is_remote'):
+            job.is_remote = db_job.is_remote
+        
+        job_objects.append(job)
+    
+    # Apply smart filtering
+    if category_list:
+        relevant_jobs = smart_matcher.search_jobs_by_interest(job_objects, category_list)
+    else:
+        relevant_jobs = smart_matcher.filter_jobs(job_objects, min_score)
+    
+    # Limit results
+    relevant_jobs = relevant_jobs[:limit]
+    
+    if not relevant_jobs:
+        console.print("[yellow]No relevant jobs found matching your criteria[/yellow]")
+        if category_list:
+            console.print(f"[blue]Searched categories: {category_list}[/blue]")
+        console.print(f"[blue]Minimum score: {min_score}[/blue]")
+        return
+    
+    # Display results
+    console.print(f"[green]Found {len(relevant_jobs)} relevant jobs[/green]")
+    
+    table = Table(title="Smart Job Search Results")
+    table.add_column("Title", style="cyan", width=30)
+    table.add_column("Company", style="green", width=20)
+    table.add_column("Source", style="blue", width=15)
+    
+    if show_keywords:
+        table.add_column("Keywords", style="yellow", width=25)
+    
+    table.add_column("URL", style="magenta", width=30)
+    
+    for job in relevant_jobs:
+        row_data = [
+            job.title,
+            job.company,
+            job.source
+        ]
+        
+        if show_keywords:
+            keywords = smart_matcher.get_matching_keywords(job)
+            keywords_str = ", ".join(keywords[:3])  # Show first 3 keywords
+            if len(keywords) > 3:
+                keywords_str += "..."
+            row_data.append(keywords_str)
+        
+        row_data.append(job.url)
+        table.add_row(*row_data)
+    
+    console.print(table)
+    
+    # Show category breakdown if no specific categories were requested
+    if not category_list:
+        console.print("\n[blue]Category Breakdown:[/blue]")
+        category_counts = {}
+        for job in relevant_jobs:
+            scores = smart_matcher.get_match_score(job)
+            for category, score in scores.items():
+                if score > 0:
+                    category_counts[category] = category_counts.get(category, 0) + 1
+        
+        for category, count in sorted(category_counts.items(), key=lambda x: x[1], reverse=True):
+            console.print(f"  {category}: {count} jobs")
 
 def main():
     """Main entry point for the CLI."""

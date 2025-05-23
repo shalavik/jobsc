@@ -3,47 +3,63 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JobRadar Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/css/all.min.css" rel="stylesheet">
+    <title>JobRadar - Smart Job Search</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         .job-card {
-            transition: transform 0.2s;
+            transition: all 0.3s ease;
         }
         .job-card:hover {
             transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
         }
-        .filter-section {
-            transition: max-height 0.3s ease-out;
+        .smart-match-indicator {
+            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+        }
+        .keyword-tag {
+            background: linear-gradient(45deg, #ffecd2 0%, #fcb69f 100%);
         }
     </style>
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-50">
     <div class="min-h-screen">
         <!-- Header -->
         <header class="bg-white shadow">
             <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-                <h1 class="text-3xl font-bold text-gray-900">JobRadar Dashboard</h1>
+                <div class="flex justify-between items-center">
+                    <h1 class="text-3xl font-bold text-gray-900">
+                        <i class="fas fa-search mr-2 text-indigo-600"></i>
+                        JobRadar
+                    </h1>
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center">
+                            <label class="text-sm text-gray-700 mr-2">Smart Matching:</label>
+                            <input type="checkbox" id="smart-match-toggle" class="toggle-checkbox">
+                            <label for="smart-match-toggle" class="toggle-label"></label>
+                        </div>
+                        <span id="job-count" class="text-sm text-gray-500">0 jobs found</span>
+                    </div>
+                </div>
             </div>
         </header>
 
-        <!-- Main Content -->
         <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
             <!-- Filters -->
             <div class="bg-white shadow rounded-lg mb-6">
                 <div class="px-4 py-5 sm:p-6">
-                    <h2 class="text-lg font-medium text-gray-900 mb-4">Filters</h2>
+                    <h2 class="text-lg font-medium text-gray-900 mb-4">Search & Filters</h2>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <!-- Text Search -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Search</label>
-                            <input type="text" id="search" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            <input type="text" id="search" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Job title, company...">
                         </div>
 
                         <!-- Location -->
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Location</label>
-                            <input type="text" id="location" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            <input type="text" id="location" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Remote, New York...">
                         </div>
 
                         <!-- Salary Range -->
@@ -59,25 +75,25 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Job Type</label>
                             <select id="job-type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                <option value="">All</option>
+                                <option value="">All types</option>
                             </select>
                         </div>
 
                         <!-- Experience Level -->
                         <div>
-                            <label class="block text-sm font-medium text-gray-700">Experience Level</label>
+                            <label class="block text-sm font-medium text-gray-700">Experience</label>
                             <select id="experience" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                <option value="">All</option>
+                                <option value="">All levels</option>
                             </select>
                         </div>
 
-                        <!-- Remote -->
+                        <!-- Remote Work -->
                         <div>
-                            <label class="block text-sm font-medium text-gray-700">Remote</label>
+                            <label class="block text-sm font-medium text-gray-700">Remote Work</label>
                             <select id="remote" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                 <option value="">All</option>
-                                <option value="true">Remote Only</option>
-                                <option value="false">On-site Only</option>
+                                <option value="true">Remote only</option>
+                                <option value="false">On-site only</option>
                             </select>
                         </div>
 
@@ -85,50 +101,127 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Source</label>
                             <select id="source" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                <option value="">All</option>
+                                <option value="">All sources</option>
+                            </select>
+                        </div>
+
+                        <!-- Smart Categories (shown when smart matching is enabled) -->
+                        <div id="smart-categories-container" class="hidden">
+                            <label class="block text-sm font-medium text-gray-700">Interest Categories</label>
+                            <select id="smart-categories" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">All categories</option>
+                                <option value="customer_support">Customer Support</option>
+                                <option value="technical_support">Technical Support</option>
+                                <option value="specialist_roles">Specialist Roles</option>
+                                <option value="compliance_analysis">Compliance</option>
+                                <option value="operations">Operations</option>
                             </select>
                         </div>
                     </div>
-
-                    <div class="mt-4 flex justify-end">
-                        <button id="reset-filters" class="mr-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                            Reset
+                    
+                    <div class="mt-4 flex space-x-3">
+                        <button id="apply-filters" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition">
+                            <i class="fas fa-search mr-2"></i>Apply Filters
                         </button>
-                        <button id="apply-filters" class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
-                            Apply Filters
+                        <button id="reset-filters" class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition">
+                            <i class="fas fa-undo mr-2"></i>Reset
                         </button>
                     </div>
                 </div>
             </div>
 
-            <!-- Job List -->
-            <div id="job-list" class="grid grid-cols-1 gap-6">
-                <!-- Jobs will be loaded here -->
+            <!-- Smart Match Info Panel -->
+            <div id="smart-info-panel" class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg mb-6 p-4 hidden">
+                <div class="flex items-center">
+                    <i class="fas fa-brain text-2xl mr-3"></i>
+                    <div>
+                        <h3 class="font-semibold">Smart Matching Enabled</h3>
+                        <p class="text-sm opacity-90">Showing jobs that match your interests in customer support, technical roles, compliance, and operations</p>
+                    </div>
+                </div>
+                <div id="category-breakdown" class="mt-3 grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+                    <!-- Category counts will be populated here -->
+                </div>
             </div>
 
-            <!-- Loading Indicator -->
-            <div id="loading" class="hidden flex justify-center items-center py-8">
-                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            <!-- Loading State -->
+            <div id="loading" class="text-center py-8 hidden">
+                <i class="fas fa-spinner fa-spin text-2xl text-indigo-600"></i>
+                <p class="mt-2 text-gray-600">Loading jobs...</p>
             </div>
 
             <!-- No Results -->
-            <div id="no-results" class="hidden text-center py-8 text-gray-500">
-                No jobs found matching your criteria
+            <div id="no-results" class="text-center py-8 hidden">
+                <i class="fas fa-search text-4xl text-gray-400 mb-4"></i>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">No jobs found</h3>
+                <p class="text-gray-600">Try adjusting your search criteria or filters</p>
             </div>
-            <!-- Error Message -->
-            <div id="error-message" class="hidden text-center py-8 text-red-600 font-semibold"></div>
+
+            <!-- Job List -->
+            <div id="job-list" class="space-y-4">
+                <!-- Jobs will be populated here -->
+            </div>
+
+            <!-- Pagination -->
+            <div id="pagination" class="mt-8 flex justify-center">
+                <!-- Pagination will be populated here -->
+            </div>
         </main>
     </div>
+
+    <style>
+        .toggle-checkbox {
+            display: none;
+        }
+        
+        .toggle-label {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+            background-color: #d1d5db;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .toggle-label::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background-color: white;
+            border-radius: 50%;
+            transition: transform 0.3s;
+        }
+        
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #4f46e5;
+        }
+        
+        .toggle-checkbox:checked + .toggle-label::after {
+            transform: translateX(26px);
+        }
+    </style>
 
     <script>
         // State
         let currentFilters = {};
         let isLoading = false;
+        let smartMatchEnabled = false;
 
         // DOM Elements
         const jobList = document.getElementById('job-list');
         const loading = document.getElementById('loading');
         const noResults = document.getElementById('no-results');
+        const smartToggle = document.getElementById('smart-match-toggle');
+        const smartInfoPanel = document.getElementById('smart-info-panel');
+        const smartCategoriesContainer = document.getElementById('smart-categories-container');
+        const categoryBreakdown = document.getElementById('category-breakdown');
+        const jobCount = document.getElementById('job-count');
+        
         const filterInputs = {
             search: document.getElementById('search'),
             location: document.getElementById('location'),
@@ -137,8 +230,24 @@
             'job-type': document.getElementById('job-type'),
             experience: document.getElementById('experience'),
             remote: document.getElementById('remote'),
-            source: document.getElementById('source')
+            source: document.getElementById('source'),
+            'smart-categories': document.getElementById('smart-categories')
         };
+
+        // Smart match toggle handler
+        smartToggle.addEventListener('change', (e) => {
+            smartMatchEnabled = e.target.checked;
+            
+            if (smartMatchEnabled) {
+                smartInfoPanel.classList.remove('hidden');
+                smartCategoriesContainer.classList.remove('hidden');
+            } else {
+                smartInfoPanel.classList.add('hidden');
+                smartCategoriesContainer.classList.add('hidden');
+            }
+            
+            loadJobs();
+        });
 
         // Load filter options
         async function loadFilterOptions() {
@@ -177,60 +286,134 @@
         // Load jobs
         async function loadJobs() {
             if (isLoading) return;
+            
             isLoading = true;
             loading.classList.remove('hidden');
-            jobList.innerHTML = '';
+            jobList.classList.add('hidden');
             noResults.classList.add('hidden');
-            document.getElementById('error-message').classList.add('hidden');
-            document.getElementById('error-message').textContent = '';
+            
             try {
-                const queryParams = new URLSearchParams(currentFilters);
-                const response = await fetch(`/api/jobs?${queryParams}`);
-                const data = await response.json();
-                if (data.error) {
-                    document.getElementById('error-message').textContent = data.error;
-                    document.getElementById('error-message').classList.remove('hidden');
-                } else if (data.jobs.length === 0) {
-                    noResults.classList.remove('hidden');
-                } else {
-                    data.jobs.forEach(job => {
-                        const jobCard = createJobCard(job);
-                        jobList.appendChild(jobCard);
+                let url, params;
+                
+                if (smartMatchEnabled) {
+                    // Use smart job search
+                    url = '/api/smart-jobs';
+                    params = new URLSearchParams({
+                        limit: '20',
+                        min_score: '1'
                     });
+                    
+                    const categories = filterInputs['smart-categories'].value;
+                    if (categories) {
+                        params.append('categories', categories);
+                    }
+                } else {
+                    // Use regular job search
+                    url = '/api/jobs';
+                    params = new URLSearchParams(currentFilters);
                 }
+                
+                const response = await fetch(`${url}?${params}`);
+                const data = await response.json();
+                
+                if (smartMatchEnabled) {
+                    displaySmartJobs(data);
+                } else {
+                    displayJobs(data);
+                }
+                
             } catch (error) {
-                document.getElementById('error-message').textContent = 'Failed to load jobs. Please try again later.';
-                document.getElementById('error-message').classList.remove('hidden');
                 console.error('Error loading jobs:', error);
+                noResults.classList.remove('hidden');
             } finally {
-                loading.classList.add('hidden');
                 isLoading = false;
+                loading.classList.add('hidden');
             }
         }
 
-        // Create job card
+        // Display regular jobs
+        function displayJobs(data) {
+            const jobs = data.jobs || [];
+            
+            jobCount.textContent = `${jobs.length} jobs found`;
+            
+            if (jobs.length === 0) {
+                noResults.classList.remove('hidden');
+                return;
+            }
+            
+            jobList.innerHTML = '';
+            jobs.forEach(job => {
+                const jobCard = createJobCard(job);
+                jobList.appendChild(jobCard);
+            });
+            
+            jobList.classList.remove('hidden');
+        }
+
+        // Display smart jobs
+        function displaySmartJobs(data) {
+            const jobs = data.jobs || [];
+            const categoryBreakdownData = data.category_breakdown || {};
+            
+            jobCount.textContent = `${jobs.length} relevant jobs found`;
+            
+            // Update category breakdown
+            updateCategoryBreakdown(categoryBreakdownData);
+            
+            if (jobs.length === 0) {
+                noResults.classList.remove('hidden');
+                return;
+            }
+            
+            jobList.innerHTML = '';
+            jobs.forEach(job => {
+                const jobCard = createSmartJobCard(job);
+                jobList.appendChild(jobCard);
+            });
+            
+            jobList.classList.remove('hidden');
+        }
+
+        // Update category breakdown
+        function updateCategoryBreakdown(breakdown) {
+            categoryBreakdown.innerHTML = '';
+            
+            const categoryNames = {
+                'customer_support': 'Customer Support',
+                'technical_support': 'Technical Support',
+                'specialist_roles': 'Specialist Roles',
+                'compliance_analysis': 'Compliance',
+                'operations': 'Operations'
+            };
+            
+            Object.entries(breakdown).forEach(([category, count]) => {
+                const div = document.createElement('div');
+                div.className = 'text-center';
+                div.innerHTML = `
+                    <div class="font-semibold">${count}</div>
+                    <div class="text-xs opacity-80">${categoryNames[category] || category}</div>
+                `;
+                categoryBreakdown.appendChild(div);
+            });
+        }
+
+        // Create regular job card
         function createJobCard(job) {
             const card = document.createElement('div');
-            card.className = 'job-card bg-white shadow rounded-lg p-6';
+            card.className = 'job-card bg-white p-6 rounded-lg shadow border border-gray-200';
             
             const remoteBadge = job.is_remote ? 
-                '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Remote</span>' : '';
+                '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"><i class="fas fa-home mr-1"></i>Remote</span>' : '';
             
-            const salary = job.salary ? 
-                `<div class="text-sm text-gray-500">${job.salary}</div>` : '';
-            
-            const location = job.location ? 
-                `<div class="text-sm text-gray-500"><i class="fas fa-map-marker-alt mr-1"></i>${job.location}</div>` : '';
-            
-            const jobType = job.job_type ? 
-                `<div class="text-sm text-gray-500"><i class="fas fa-briefcase mr-1"></i>${job.job_type}</div>` : '';
-            
-            const experience = job.experience_level ? 
-                `<div class="text-sm text-gray-500"><i class="fas fa-user-tie mr-1"></i>${job.experience_level}</div>` : '';
+            const location = job.location ? `<div class="text-sm text-gray-500"><i class="fas fa-map-marker-alt mr-1"></i>${job.location}</div>` : '';
+            const salary = job.salary ? `<div class="text-sm text-gray-500"><i class="fas fa-dollar-sign mr-1"></i>${job.salary}</div>` : '';
+            const jobType = job.job_type ? `<div class="text-sm text-gray-500"><i class="fas fa-briefcase mr-1"></i>${job.job_type}</div>` : '';
+            const experience = job.experience_level ? `<div class="text-sm text-gray-500"><i class="fas fa-chart-line mr-1"></i>${job.experience_level}</div>` : '';
 
             card.innerHTML = `
                 <div class="flex justify-between items-start">
-                    <div>
+                    <div class="flex-1">
                         <h3 class="text-lg font-medium text-gray-900">${job.title}</h3>
                         <div class="text-sm text-gray-500">${job.company}</div>
                     </div>
@@ -246,11 +429,42 @@
                     <div class="text-sm text-gray-500">
                         <i class="fas fa-globe mr-1"></i>${job.source}
                     </div>
-                    <a href="${job.url}" target="_blank" class="text-indigo-600 hover:text-indigo-900">
+                    <a href="${job.url}" target="_blank" class="text-indigo-600 hover:text-indigo-900 font-medium">
                         View Job <i class="fas fa-external-link-alt ml-1"></i>
                     </a>
                 </div>
             `;
+            
+            return card;
+        }
+
+        // Create smart job card with keyword highlighting
+        function createSmartJobCard(job) {
+            const card = createJobCard(job);
+            
+            // Add smart match indicator
+            const smartBadge = '<span class="smart-match-indicator inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white"><i class="fas fa-brain mr-1"></i>Smart Match</span>';
+            
+            // Add keywords if available
+            if (job.matching_keywords && job.matching_keywords.length > 0) {
+                const keywordsHtml = job.matching_keywords.slice(0, 3).map(keyword => 
+                    `<span class="keyword-tag inline-flex items-center px-2 py-1 rounded-full text-xs font-medium text-gray-800">${keyword}</span>`
+                ).join(' ');
+                
+                const keywordsDiv = document.createElement('div');
+                keywordsDiv.className = 'mt-3 flex flex-wrap gap-2';
+                keywordsDiv.innerHTML = keywordsHtml;
+                card.appendChild(keywordsDiv);
+            }
+            
+            // Update the badges section
+            const badgeContainer = card.querySelector('.flex.justify-between.items-start');
+            const existingBadges = badgeContainer.querySelector('span');
+            if (existingBadges) {
+                existingBadges.insertAdjacentHTML('beforebegin', smartBadge + ' ');
+            } else {
+                badgeContainer.querySelector('div:last-child').insertAdjacentHTML('afterend', `<div>${smartBadge}</div>`);
+            }
             
             return card;
         }
@@ -267,9 +481,14 @@
             
             // Other filters
             for (const [key, input] of Object.entries(filterInputs)) {
-                if (key !== 'search' && input.value) {
+                if (key !== 'search' && key !== 'smart-categories' && input.value) {
                     currentFilters[key] = input.value;
                 }
+            }
+            
+            // Add smart match parameter
+            if (smartMatchEnabled) {
+                currentFilters.smart_match = 'true';
             }
         }
 
@@ -284,6 +503,10 @@
                 input.value = '';
             }
             currentFilters = {};
+            smartToggle.checked = false;
+            smartMatchEnabled = false;
+            smartInfoPanel.classList.add('hidden');
+            smartCategoriesContainer.classList.add('hidden');
             loadJobs();
         });
 

@@ -28,6 +28,14 @@ filters:
   locations: []
   exclude: []
 
+# Smart filtering configuration - filters jobs before they enter the database
+smart_filtering:
+  enabled: true               # Enable smart filtering by default
+  min_score: 1               # Minimum relevance score (1-5)
+  categories:                # Categories of jobs you're interested in
+    - customer_support       # Customer service, support, customer experience
+    - operations            # Operations, business operations
+  
 notifications:
   telegram:
     enabled: true

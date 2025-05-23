@@ -2,11 +2,13 @@
 from flask import Flask, render_template, jsonify, request
 from ..database import Database
 from ..models import Job
+from ..smart_matcher import create_smart_matcher
 import logging
 import functools
 from datetime import datetime, timedelta
+import time
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates', static_folder='static')
 db = Database()
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,9 @@ def get_jobs():
         if salary_max:
             filters['salary_max'] = int(salary_max) * 1000  # Convert to actual salary
         
+        # Smart matching filter
+        smart_match = request.args.get('smart_match')
+        
         # Pagination
         page = int(request.args.get('page', 1))
         per_page = int(request.args.get('per_page', 20))
@@ -77,7 +82,40 @@ def get_jobs():
         total_count = db.count_jobs(filters)
         
         # Get jobs from database with pagination
-        jobs = db.search_jobs(filters=filters, limit=per_page, offset=offset)
+        jobs = db.search_jobs(filters=filters, limit=per_page * 2, offset=offset)  # Get extra for smart filtering
+        
+        # Apply smart matching if requested
+        if smart_match and smart_match.lower() == 'true':
+            smart_matcher = create_smart_matcher()
+            # Convert to Job objects for smart matching
+            job_objects = []
+            for db_job in jobs:
+                job = Job(
+                    id=db_job.id,
+                    title=db_job.title,
+                    company=db_job.company,
+                    url=db_job.url,
+                    source=db_job.source,
+                    date=db_job.date.isoformat() if db_job.date else ""
+                )
+                # Add additional fields
+                for attr in ['description', 'location', 'salary', 'job_type', 'experience_level', 'is_remote']:
+                    if hasattr(db_job, attr):
+                        setattr(job, attr, getattr(db_job, attr))
+                job_objects.append(job)
+            
+            # Filter using smart matcher
+            relevant_jobs = smart_matcher.filter_jobs(job_objects, min_score=1)
+            
+            # Convert back to database format for consistency
+            jobs = []
+            for job in relevant_jobs[:per_page]:  # Apply pagination after smart filtering
+                # Find the original database job
+                db_job = next((j for j in db.search_jobs({'id': job.id}, limit=1)), None)
+                if db_job:
+                    jobs.append(db_job)
+        else:
+            jobs = jobs[:per_page]  # Apply normal pagination
         
         # Convert jobs to dictionary format
         job_list = []
@@ -88,21 +126,22 @@ def get_jobs():
                 'company': job.company,
                 'url': job.url,
                 'source': job.source,
+                'date': job.date.isoformat() if job.date else None,
+                'description': getattr(job, 'description', None),
                 'location': getattr(job, 'location', None),
                 'salary': getattr(job, 'salary', None),
                 'job_type': getattr(job, 'job_type', None),
                 'experience_level': getattr(job, 'experience_level', None),
-                'is_remote': getattr(job, 'is_remote', False),
-                'date': job.date.isoformat() if job.date else None,
+                'is_remote': getattr(job, 'is_remote', False)
             }
             job_list.append(job_dict)
         
         return jsonify({
             'jobs': job_list,
             'pagination': {
-                'total': total_count,
                 'page': page,
                 'per_page': per_page,
+                'total': total_count,
                 'pages': (total_count + per_page - 1) // per_page
             }
         })
@@ -128,6 +167,111 @@ def get_filters():
     except Exception as e:
         logger.error(f"Error in /api/filters: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/smart-jobs')
+@cached_api(ttl_seconds=60)  # Cache for 60 seconds
+def get_smart_jobs():
+    """Get jobs using smart title matching."""
+    try:
+        # Get parameters
+        categories = request.args.get('categories', '').split(',') if request.args.get('categories') else None
+        min_score = int(request.args.get('min_score', 1))
+        limit = int(request.args.get('limit', 20))
+        
+        # Clean up categories
+        if categories:
+            categories = [cat.strip() for cat in categories if cat.strip()]
+            if not categories:
+                categories = None
+        
+        # Get all jobs from database
+        all_jobs = db.search_jobs(filters={}, limit=1000)
+        
+        if not all_jobs:
+            return jsonify({'jobs': [], 'message': 'No jobs found in database'})
+        
+        # Convert to Job objects
+        job_objects = []
+        for db_job in all_jobs:
+            job = Job(
+                id=db_job.id,
+                title=db_job.title,
+                company=db_job.company,
+                url=db_job.url,
+                source=db_job.source,
+                date=db_job.date.isoformat() if db_job.date else ""
+            )
+            # Add additional fields
+            for attr in ['description', 'location', 'salary', 'job_type', 'experience_level', 'is_remote']:
+                if hasattr(db_job, attr):
+                    setattr(job, attr, getattr(db_job, attr))
+            job_objects.append(job)
+        
+        # Apply smart filtering
+        smart_matcher = create_smart_matcher()
+        if categories:
+            # Validate categories
+            valid_categories = list(smart_matcher.INTERESTED_KEYWORDS.keys())
+            invalid_categories = [cat for cat in categories if cat not in valid_categories]
+            if invalid_categories:
+                return jsonify({
+                    'error': f'Invalid categories: {invalid_categories}',
+                    'valid_categories': valid_categories
+                }), 400
+            
+            relevant_jobs = smart_matcher.search_jobs_by_interest(job_objects, categories)
+        else:
+            relevant_jobs = smart_matcher.filter_jobs(job_objects, min_score)
+        
+        # Limit results
+        relevant_jobs = relevant_jobs[:limit]
+        
+        # Convert to response format
+        job_list = []
+        category_counts = {}
+        
+        for job in relevant_jobs:
+            # Get matching keywords and scores
+            keywords = smart_matcher.get_matching_keywords(job)
+            scores = smart_matcher.get_match_score(job)
+            
+            # Count categories
+            for category, score in scores.items():
+                if score > 0:
+                    category_counts[category] = category_counts.get(category, 0) + 1
+            
+            job_dict = {
+                'id': job.id,
+                'title': job.title,
+                'company': job.company,
+                'url': job.url,
+                'source': job.source,
+                'date': job.date if job.date else None,
+                'description': getattr(job, 'description', None),
+                'location': getattr(job, 'location', None),
+                'salary': getattr(job, 'salary', None),
+                'job_type': getattr(job, 'job_type', None),
+                'experience_level': getattr(job, 'experience_level', None),
+                'is_remote': getattr(job, 'is_remote', False),
+                'matching_keywords': keywords,
+                'category_scores': scores
+            }
+            job_list.append(job_dict)
+        
+        return jsonify({
+            'jobs': job_list,
+            'category_breakdown': category_counts,
+            'total_found': len(relevant_jobs),
+            'search_params': {
+                'categories': categories,
+                'min_score': min_score,
+                'limit': limit
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in smart job search: {str(e)}")
+        return jsonify({'error': 'Failed to perform smart job search'}), 500
 
 def run_server(host='0.0.0.0', port=5000, debug=False):
     """Run the Flask development server."""
