@@ -401,6 +401,5 @@ def smart_search(categories: Optional[str], min_score: int, limit: int, show_key
         for category, count in sorted(category_counts.items(), key=lambda x: x[1], reverse=True):
             console.print(f"  {category}: {count} jobs")
 
-def main():
-    """Main entry point for the CLI."""
+if __name__ == "__main__":
     cli() 

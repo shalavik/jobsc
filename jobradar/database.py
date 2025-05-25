@@ -350,23 +350,68 @@ class Database:
     
     @cache_result(ttl_seconds=300)
     def get_unique_values(self, field: str) -> List[str]:
-        """Get unique values for a field from the database.
+        """Get unique values for a specific field.
         
         Args:
-            field: Name of the field to get unique values for
+            field: Field name to get unique values for
             
         Returns:
             List[str]: List of unique values
         """
         try:
             with self.Session() as session:
-                if not hasattr(JobModel, field):
+                if field == 'source':
+                    results = session.query(JobModel.source).distinct().all()
+                elif field == 'company':
+                    results = session.query(JobModel.company).distinct().all()
+                elif field == 'location':
+                    results = session.query(JobModel.location).distinct().all()
+                elif field == 'job_type':
+                    results = session.query(JobModel.job_type).distinct().all()
+                elif field == 'experience_level':
+                    results = session.query(JobModel.experience_level).distinct().all()
+                else:
                     return []
-                    
-                column = getattr(JobModel, field)
-                results = session.query(column).distinct().all()
-                return [r[0] for r in results if r[0] is not None]
+                
+                return [result[0] for result in results if result[0]]
                 
         except SQLAlchemyError as e:
             logger.error(f"Error getting unique values for {field}: {str(e)}")
+            return []
+    
+    def get_jobs_by_source(self, source: str) -> List[JobModel]:
+        """Get jobs filtered by source.
+        
+        Args:
+            source: Source name to filter by
+            
+        Returns:
+            List[JobModel]: List of jobs from the specified source
+        """
+        try:
+            with self.Session() as session:
+                return session.query(JobModel).filter_by(source=source).all()
+        except SQLAlchemyError as e:
+            logger.error(f"Error getting jobs by source {source}: {str(e)}")
+            return []
+    
+    def get_recent_jobs(self, days: int = 30) -> List[JobModel]:
+        """Get jobs from the last N days.
+        
+        Args:
+            days: Number of days to look back
+            
+        Returns:
+            List[JobModel]: List of recent jobs
+        """
+        try:
+            from datetime import datetime, timedelta
+            cutoff_date = datetime.utcnow() - timedelta(days=days)
+            
+            with self.Session() as session:
+                return session.query(JobModel).filter(
+                    JobModel.created_at >= cutoff_date
+                ).order_by(JobModel.created_at.desc()).all()
+        except SQLAlchemyError as e:
+            logger.error(f"Error getting recent jobs: {str(e)}")
             return [] 

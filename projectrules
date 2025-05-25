@@ -1,4 +1,5 @@
 feeds:
+  # RSS Feeds - These are the most reliable
   - name: weworkremotely
     url: https://weworkremotely.com/categories/remote-programming-jobs.rss
     type: rss
@@ -23,6 +24,118 @@ feeds:
       requests_per_minute: 30
       retry_after: 10
 
+  - name: cryptojobslist
+    url: https://api.cryptojobslist.com/jobs.rss
+    type: rss
+    parser: rss
+    fetch_method: rss
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 30
+      retry_after: 10
+
+  # Add more RSS feeds for better coverage
+  - name: weworkremotely_customer_support
+    url: https://weworkremotely.com/categories/remote-customer-support-jobs.rss
+    type: rss
+    parser: rss
+    fetch_method: rss
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 30
+      retry_after: 10
+
+  - name: remoteok_customer_support
+    url: https://remoteok.com/remote-customer-support-jobs.rss
+    type: rss
+    parser: rss
+    fetch_method: rss
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 30
+      retry_after: 10
+
+  # HTML Feeds (Working ones only)
+  - name: remotive
+    url: https://www.remotive.com/remote-jobs/customer-support
+    type: headless
+    parser: remotive
+    fetch_method: headless
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: jobspresso
+    url: https://jobspresso.co/remote-jobs/
+    type: headless
+    parser: jobspresso
+    fetch_method: headless
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 30
+      retry_after: 10
+
+  - name: nodesk_substack
+    url: https://nodesk.substack.com/p/nodesk-issue-370
+    type: headless
+    parser: nodesk_substack
+    fetch_method: headless
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  # LinkedIn without proxy issues
+  - name: linkedin
+    url: https://www.linkedin.com/jobs/search/?keywords=remote%20customer%20support
+    type: headless
+    parser: linkedin
+    fetch_method: headless
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 5
+      retry_after: 60
+
+  # Add AngelList as a reliable alternative
+  - name: angellist
+    url: https://angel.co/jobs
+    type: headless
+    parser: linkedin  # Use similar parser structure
+    fetch_method: headless
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
+  - name: snaphunt
+    url: https://snaphunt.com/job-listing/all-locations/Remote/?industry=Professional%20Services
+    type: headless
+    parser: snaphunt
+    fetch_method: headless
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    rate_limit:
+      requests_per_minute: 10
+      retry_after: 30
+
 filters:
   keywords: []
   locations: []
@@ -30,11 +143,29 @@ filters:
 
 # Smart filtering configuration - filters jobs before they enter the database
 smart_filtering:
-  enabled: true               # Enable smart filtering by default
-  min_score: 1               # Minimum relevance score (1-5)
-  categories:                # Categories of jobs you're interested in
-    - customer_support       # Customer service, support, customer experience
-    - operations            # Operations, business operations
+  enabled: true
+  min_score: 1
+  categories:
+    - customer_support
+    - operations
+    - technical_support
+    - specialist_roles
+    - compliance_analysis
+    - software_development
+    - design
+    - marketing
+    - product_management
+    - sales
+    - data
+    - finance
+    - hr
+    - devops
+    - qa
+    - project_management
+    - content
+    - legal
+    - education
+    - healthcare
   
 notifications:
   telegram:

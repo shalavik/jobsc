@@ -42,6 +42,16 @@ class Job:
         """Initialize default values for mutable attributes."""
         if self.skills is None:
             self.skills = []
+    
+    def __eq__(self, other):
+        """Two jobs are equal if they have the same ID."""
+        if not isinstance(other, Job):
+            return False
+        return self.id == other.id
+    
+    def __hash__(self):
+        """Hash based on job ID for use in sets and dictionaries."""
+        return hash(self.id)
 
 @dataclass
 class Feed:
