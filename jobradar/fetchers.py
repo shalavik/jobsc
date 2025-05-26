@@ -919,9 +919,15 @@ class Fetcher:
     def _parse_remotive(self, soup, feed):
         """Parse jobs from remotive.com with updated selectors (2024)."""
         jobs = []
-        # Find all job cards by the new class
-        job_cards = soup.find_all("div", class_="job-tile remotive-bg-sand-light")
-        allowed_location_keywords = ["worldwide", "global", "remote", "anywhere", ""]
+        # Find all job cards by the new class (multiple background variants)
+        # Use a set to avoid duplicates
+        job_cards_set = set()
+        for card in (soup.find_all("div", class_="job-tile remotive-bg-sand-light") +
+                     soup.find_all("div", class_="job-tile remotive-bg-light") +
+                     soup.find_all("div", class_="job-tile")):
+            job_cards_set.add(card)
+        job_cards = list(job_cards_set)
+        allowed_location_keywords = ["worldwide", "global", "remote", "anywhere", "", "usa", "uk", "canada", "india", "emea", "apac", "thailand", "south africa", "philippines", "netherlands", "spain", "australia"]
         allowed_categories = ["customer service", "customer support"]
         if job_cards:
             logger.info(f"Found {len(job_cards)} Remotive job cards (2024 structure)")
@@ -930,16 +936,21 @@ class Fetcher:
                 title_elem = card.find("a", class_="remotive-url-visit")
                 if not title_elem:
                     continue
+                # Look for spans with remotive-bold class or empty class
                 title_spans = title_elem.find_all("span", class_="remotive-bold")
+                if not title_spans:
+                    # Fallback to spans with empty class or any span
+                    title_spans = title_elem.find_all("span", class_="") or title_elem.find_all("span")
                 if not title_spans:
                     continue
                 title_text = title_spans[0].get_text(strip=True)
-                # Company: try to get from next span, or fallback
+                # Company: look for the company name (skip the "•" separator)
                 company_text = "Unknown Company"
-                if len(title_spans) > 1:
-                    company_text = title_spans[1].get_text(strip=True)
+                # Try to find company in the visible desktop span (3rd span, skipping title and "•")
+                if len(title_spans) >= 3:
+                    company_text = title_spans[2].get_text(strip=True)
                 else:
-                    # Try fallback
+                    # Try fallback to mobile-only span
                     company_fallback = title_elem.find("span", class_="tw-block md:tw-hidden")
                     if company_fallback:
                         company_text = company_fallback.get_text(strip=True)
@@ -962,10 +973,10 @@ class Fetcher:
                 ) or not locations  # Accept if no location tags
 
                 if not has_customer:
-                    logger.debug(f"Filtered out job '{title_text}' at '{company_text}': missing allowed customer category.")
+                    logger.debug(f"Filtered out job '{title_text}' at '{company_text}': missing 'Customer Service' category")
                     continue
                 if not has_allowed_location:
-                    logger.debug(f"Filtered out job '{title_text}' at '{company_text}': missing allowed location.")
+                    logger.debug(f"Filtered out job '{title_text}' at '{company_text}': missing allowed location")
                     continue
                 job = Job(
                     id=job_id,

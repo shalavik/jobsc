@@ -1,0 +1,27 @@
+# Sample proxy list for Indeed scraping
+# Format: protocol://username:password@host:port
+# Replace these with your actual proxies
+
+# Proxy configuration for JobRadar
+# Currently no proxies configured - using direct connections
+# To add proxies, uncomment and modify the lines below:
+
+# HTTP proxies
+# http://username:password@proxy1.example.com:8080
+# http://username:password@proxy2.example.com:8080
+
+# HTTPS proxies  
+# https://username:password@proxy1.example.com:8443
+# https://username:password@proxy2.example.com:8443
+
+# SOCKS5 proxies
+# socks5://username:password@proxy1.example.com:1080
+# socks5://username:password@proxy2.example.com:1080
+
+# Note: You can also set proxies via environment variables:
+# PROXY_LIST=http://proxy1:8080,http://proxy2:8080
+# PROXY_USERNAME=your_username
+# PROXY_PASSWORD=your_password
+
+# Note: Replace example.com with actual proxy servers
+# and provide real credentials if using authenticated proxies 

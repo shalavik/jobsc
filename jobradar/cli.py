@@ -43,9 +43,9 @@ def list_feeds():
 @click.option('--feed', help='Specific feed to fetch from')
 @click.option('--limit', type=int, default=100, help='Maximum number of jobs to fetch')
 @click.option('--apply-filters/--no-filters', default=True, help='Apply configured filters')
-@click.option('--smart-filter/--no-smart-filter', default=None, help='Apply smart filtering to only save relevant jobs (overrides config)')
+@click.option('--smart/--no-smart', default=None, help='Apply smart filtering to only save relevant jobs (overrides config)')
 @click.option('--min-score', type=int, default=None, help='Minimum relevance score for smart filtering (overrides config)')
-def fetch(feed: str, limit: int, apply_filters: bool, smart_filter: Optional[bool], min_score: Optional[int]):
+def fetch(feed: str, limit: int, apply_filters: bool, smart: Optional[bool], min_score: Optional[int]):
     """Fetch jobs from configured feeds."""
     config = get_config()
     fetcher = Fetcher()
@@ -56,14 +56,14 @@ def fetch(feed: str, limit: int, apply_filters: bool, smart_filter: Optional[boo
     
     # Get smart filtering configuration from config or CLI options
     smart_config = config.get('smart_filtering', {})
-    if smart_filter is None:
-        smart_filter = smart_config.get('enabled', True)  # Default to enabled
+    if smart is None:
+        smart = smart_config.get('enabled', True)  # Default to enabled
     if min_score is None:
         min_score = smart_config.get('min_score', 1)  # Default min score
     
     # Initialize smart matcher if smart filtering is enabled
     smart_matcher = None
-    if smart_filter:
+    if smart:
         # Use categories from config if specified
         categories = smart_config.get('categories', [])
         if categories:

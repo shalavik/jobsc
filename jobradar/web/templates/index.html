@@ -167,6 +167,34 @@
                 <!-- Pagination will be populated here -->
             </div>
         </main>
+
+        <!-- Job Preview Modal -->
+        <div id="job-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+            <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+                <div class="mt-3">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 id="modal-title" class="text-lg font-medium text-gray-900"></h3>
+                        <button id="close-modal" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                    <div id="modal-content" class="text-sm text-gray-500">
+                        <!-- Job details will be loaded here -->
+                    </div>
+                    <div class="flex justify-between items-center mt-6">
+                        <button id="modal-prev" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition">
+                            <i class="fas fa-chevron-left mr-2"></i>Previous
+                        </button>
+                        <a id="modal-apply" href="#" target="_blank" class="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700 transition">
+                            Apply Now <i class="fas fa-external-link-alt ml-2"></i>
+                        </a>
+                        <button id="modal-next" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition">
+                            Next <i class="fas fa-chevron-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <style>
@@ -211,6 +239,10 @@
         let currentFilters = {};
         let isLoading = false;
         let smartMatchEnabled = false;
+        let currentJobs = [];
+        let currentJobIndex = -1;
+        let currentJobs = [];
+        let currentJobIndex = -1;
 
         // DOM Elements
         const jobList = document.getElementById('job-list');
@@ -221,6 +253,19 @@
         const smartCategoriesContainer = document.getElementById('smart-categories-container');
         const categoryBreakdown = document.getElementById('category-breakdown');
         const jobCount = document.getElementById('job-count');
+        
+        // Modal elements
+        const jobModal = document.getElementById('job-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalContent = document.getElementById('modal-content');
+        const modalApply = document.getElementById('modal-apply');
+        const closeModal = document.getElementById('close-modal');
+        const modalPrev = document.getElementById('modal-prev');
+        const modalNext = document.getElementById('modal-next');
+        
+        // Modal state
+        let currentJobs = [];
+        let currentJobIndex = -1;
         
         const filterInputs = {
             search: document.getElementById('search'),
@@ -510,8 +555,128 @@
             loadJobs();
         });
 
+        // URL Query Parameter Support
+        function updateURLParams() {
+            const params = new URLSearchParams();
+            
+            // Add current filters to URL
+            for (const [key, value] of Object.entries(currentFilters)) {
+                if (value && key !== 'smart_match') {
+                    params.set(key, value);
+                }
+            }
+            
+            // Add smart match state
+            if (smartMatchEnabled) {
+                params.set('smart', 'true');
+            }
+            
+            // Update URL without page reload
+            const newURL = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+            window.history.replaceState({}, '', newURL);
+        }
+
+        function loadFromURLParams() {
+            const params = new URLSearchParams(window.location.search);
+            
+            // Load filters from URL
+            for (const [key, value] of params.entries()) {
+                if (key === 'smart') {
+                    smartToggle.checked = value === 'true';
+                    smartMatchEnabled = value === 'true';
+                    if (smartMatchEnabled) {
+                        smartInfoPanel.classList.remove('hidden');
+                        smartCategoriesContainer.classList.remove('hidden');
+                    }
+                } else if (filterInputs[key]) {
+                    filterInputs[key].value = value;
+                    currentFilters[key] = value;
+                }
+            }
+        }
+
+        // Update the apply filters function to update URL
+        document.getElementById('apply-filters').addEventListener('click', () => {
+            updateFilters();
+            updateURLParams();
+            loadJobs();
+        });
+
+        // Modal functionality
+        function openJobModal(jobIndex) {
+            currentJobIndex = jobIndex;
+            const job = currentJobs[jobIndex];
+            
+            modalTitle.textContent = job.title;
+            modalApply.href = job.url;
+            
+            // Build modal content
+            const remoteBadge = job.is_remote ? 
+                '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mb-2"><i class="fas fa-home mr-1"></i>Remote</span>' : '';
+            
+            modalContent.innerHTML = `
+                <div class="space-y-4">
+                    <div>
+                        <h4 class="font-medium text-gray-900">${job.company}</h4>
+                        ${remoteBadge}
+                    </div>
+                    ${job.location ? `<div><strong>Location:</strong> ${job.location}</div>` : ''}
+                    ${job.salary ? `<div><strong>Salary:</strong> ${job.salary}</div>` : ''}
+                    ${job.job_type ? `<div><strong>Type:</strong> ${job.job_type}</div>` : ''}
+                    ${job.experience_level ? `<div><strong>Experience:</strong> ${job.experience_level}</div>` : ''}
+                    <div><strong>Source:</strong> ${job.source}</div>
+                    ${job.description ? `<div class="mt-4"><strong>Description:</strong><div class="mt-2 text-gray-600">${job.description.substring(0, 500)}${job.description.length > 500 ? '...' : ''}</div></div>` : ''}
+                </div>
+            `;
+            
+            // Update navigation buttons
+            modalPrev.disabled = jobIndex === 0;
+            modalNext.disabled = jobIndex === currentJobs.length - 1;
+            modalPrev.classList.toggle('opacity-50', jobIndex === 0);
+            modalNext.classList.toggle('opacity-50', jobIndex === currentJobs.length - 1);
+            
+            jobModal.classList.remove('hidden');
+        }
+
+        function closeJobModal() {
+            jobModal.classList.add('hidden');
+        }
+
+        function navigateModal(direction) {
+            const newIndex = currentJobIndex + direction;
+            if (newIndex >= 0 && newIndex < currentJobs.length) {
+                openJobModal(newIndex);
+            }
+        }
+
+        // Modal event listeners
+        closeModal.addEventListener('click', closeJobModal);
+        modalPrev.addEventListener('click', () => navigateModal(-1));
+        modalNext.addEventListener('click', () => navigateModal(1));
+        
+        // Close modal when clicking outside
+        jobModal.addEventListener('click', (e) => {
+            if (e.target === jobModal) {
+                closeJobModal();
+            }
+        });
+        
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (!jobModal.classList.contains('hidden')) {
+                if (e.key === 'Escape') {
+                    closeJobModal();
+                } else if (e.key === 'ArrowLeft') {
+                    navigateModal(-1);
+                } else if (e.key === 'ArrowRight') {
+                    navigateModal(1);
+                }
+            }
+        });
+
         // Initialize
         loadFilterOptions();
+        loadFromURLParams();
         loadJobs();
     </script>
 </body>

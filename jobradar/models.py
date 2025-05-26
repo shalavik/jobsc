@@ -39,9 +39,15 @@ class Job:
     skills: list = None
 
     def __post_init__(self):
-        """Initialize default values for mutable attributes."""
+        """Initialize default values for mutable attributes and validate required fields."""
         if self.skills is None:
             self.skills = []
+        
+        # Validate required fields
+        if not self.id or not isinstance(self.id, str) or not self.id.strip():
+            raise ValueError("Job ID is required and must be a non-empty string")
+        if not self.title or not isinstance(self.title, str) or not self.title.strip():
+            raise ValueError("Job title is required and must be a non-empty string")
     
     def __eq__(self, other):
         """Two jobs are equal if they have the same ID."""
@@ -82,4 +88,9 @@ class Feed:
     error_count: int = 0
     last_error: str = ""
     headers: Optional[Dict[str, str]] = None  # Custom HTTP headers
-    cookies: Optional[Dict[str, str]] = None  # Custom HTTP cookies 
+    cookies: Optional[Dict[str, str]] = None  # Custom HTTP cookies
+    
+    def __post_init__(self):
+        """Validate required fields."""
+        if not self.url or not isinstance(self.url, str) or not self.url.strip():
+            raise ValueError("Feed URL is required and must be a non-empty string") 
