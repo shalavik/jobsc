@@ -1,0 +1,155 @@
+# .cursorrules
+# version: 1.1.1
+# Author: Adapted for JobRadar Python Project
+# Cursor AI configuration for JobRadar Job Delivery Application
+
+# -------------------- 🔍 File Matching --------------------
+include:
+  - "*.py"
+  - "*.html"
+  - "*.css"
+  - "*.js"
+  - "*.md"
+  - "*.txt"
+  - "*.yaml"
+  - "*.yml"
+  - "*.json"
+  - "*.toml"
+  - "*.cfg"
+  - "*.ini"
+  - "requirements*.txt"
+  - "pyproject.toml"
+  - "setup.py"
+  - "jobradar/**"
+  - "tests/**"
+  - "scripts/**"
+
+exclude:
+  - "*.pyc"
+  - "__pycache__/**"
+  - "*.min.js"
+  - "*.min.css"
+  - "node_modules/**"
+  - "dist/**"
+  - "build/**"
+  - "coverage/**"
+  - ".git/**"
+  - "**/.DS_Store"
+  - ".venv/**"
+  - ".env"
+  - "*.log"
+  - ".cursorrules.backup"
+  - "jobs.db*"
+
+search_paths:
+  - "."
+  - "jobradar/"
+  - "tests/"
+
+max_search_file_size: 5242880   # 5 MB
+
+# -------------------- ✍️ Editor Defaults --------------------
+editor:
+  tab_size: 4
+  insert_spaces: true
+  end_of_line: lf
+  trim_trailing_whitespace: true
+  ensure_newline_at_eof: true
+
+# -------------------- 🤖 AI Behavior Rules --------------------
+rules:
+
+  # ---------------------------------------------------------------------------
+  general_guidelines:
+    description: "Project-wide behaviour, code standards and workflow"
+    enabled: true
+    rules:
+
+      # 📝 Documentation & Language
+      - description: "All documentation, config files, code comments and metadata (README.md, .cursorrules, etc.) must be written in English."
+      - description: "Use clear, descriptive docstrings for all Python functions, classes, and modules following PEP 257."
+
+      # 🏷️ Naming Conventions & Terminology
+      - description: "ALWAYS distinguish between 'fetchers' (job data collection modules), 'delivery' (CLI/web interfaces), and 'smart matching' (AI-based job filtering)."
+      - description: "Use 'fetcher' when referring to job data collection from external sources (LinkedIn, Indeed, etc.)."
+      - description: "Use 'delivery' when referring to CLI commands or web interface functionality."
+      - description: "Use 'smart matching' when referring to AI-powered job relevance scoring."
+      - description: "Follow Python PEP 8 naming conventions: snake_case for functions/variables, PascalCase for classes."
+
+      # 🛠 Maintenance & Recovery
+      - description: "Keep README.md up to date with: 1) project description, 2) installation instructions, 3) usage examples, 4) API documentation."
+      - description: "Maintain requirements.txt with pinned versions for production stability."
+      - description: "Document new fetcher implementations in the fetchers module docstring."
+
+      # 🧪 Testing & TDD
+      - description: "Strict TDD: write or update tests *before* adding logic; merge only when all tests pass."
+      - description: "Use pytest for all testing; organize tests to mirror the jobradar package structure."
+      - description: "Run tests with: pytest (all tests) or pytest tests/test_specific.py (specific test)."
+      - description: "Mock external API calls in tests using pytest-mock or responses library."
+      - description: "Auto-fix failing tests based on internal logic whenever possible."
+
+      # 🏃 Execution Flow
+      - description: "Do not prompt for confirmation. Execute steps sequentially without pauses once a command is issued."
+      - description: "Handle CLI errors gracefully with informative error messages and exit codes."
+      - description: "Use proper logging levels (DEBUG, INFO, WARNING, ERROR) for different scenarios."
+
+      # 🔧 Git & Version Control
+      - description: "ALWAYS prefer local version over remote in conflicts: use 'git checkout --ours' for all conflicts, then 'git add .' and continue rebase/merge."
+      - description: "Local development version is always newer than CI/CD auto-updated remote version."
+      - description: "Use 'git pull origin main --strategy=ours' to automatically resolve conflicts in favor of local changes."
+      - description: "Never manually resolve merge conflicts - always take local version with --ours strategy."
+
+      # 🧹 Clean Code & Python Best Practices
+      - description: "Follow PEP 8 style guidelines strictly."
+      - description: "Use type hints for all function parameters and return values."
+      - description: "Keep functions under 50 lines; extract to helper functions when approaching the limit."
+      - description: "Use consistent error handling with try/except blocks and proper exception types."
+      - description: "Prefer pathlib over os.path for file operations."
+      - description: "Use f-strings for string formatting instead of .format() or % formatting."
+
+      # 🏗️ Architecture & Structure
+      - description: "Maintain clear separation between fetchers (data collection), delivery (interfaces), and core (business logic)."
+      - description: "Keep web interface JavaScript simple and avoid complex state management."
+      - description: "Use environment variables for configuration that may change between deployments."
+      - description: "Implement proper database connection pooling and cleanup."
+
+      # 📏 Performance & Scalability
+      - description: "Use async/await for I/O operations where appropriate."
+      - description: "Implement proper rate limiting for external API calls."
+      - description: "Cache expensive operations (database queries, API responses) appropriately."
+      - description: "Use connection pooling for database operations."
+
+  # ---------------------------------------------------------------------------
+  web_interface:
+    description: "Web dashboard and API specific guidelines"
+    enabled: true
+    rules:
+      - description: "Keep JavaScript simple and avoid complex frameworks - prefer vanilla JS with clear error handling."
+      - description: "Always handle empty/null job fields gracefully in the frontend."
+      - description: "Use proper HTTP status codes in API responses (200, 404, 500, etc.)."
+      - description: "Implement proper CORS headers if needed for API access."
+      - description: "Use semantic HTML and accessible markup for all UI elements."
+
+  # ---------------------------------------------------------------------------
+  database_operations:
+    description: "Database handling and data integrity"
+    enabled: true
+    rules:
+      - description: "Always use parameterized queries to prevent SQL injection."
+      - description: "Implement proper database connection cleanup with context managers."
+      - description: "Handle database migration scripts carefully with proper error handling."
+      - description: "Use transactions for multi-step database operations."
+      - description: "Index frequently queried columns for performance."
+
+  # ---------------------------------------------------------------------------
+  token_economy:
+    description: "Minimise token usage and API costs"
+    enabled: false
+    rules:
+      - description: "Limit input tokens per request to ≤40,000 to stay within Tier 2 per-minute limits for Claude Sonnet 4."
+      - description: "Restrict context size: load no more than 10 files or 30,000 tokens per request."
+      - description: "Split large tasks into smaller sub-tasks so that each request remains under the token threshold."
+      - description: "Reduce or batch cache writes to save tokens – avoid `usage_input_tokens_cache_write` spikes."
+      - description: "If a single request exceeds limits, automatically chunk the prompt into sequential requests, carrying over state as needed."
+
+# End of .cursorrules 

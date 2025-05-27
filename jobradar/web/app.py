@@ -1,5 +1,6 @@
 """Web dashboard for JobRadar."""
-from flask import Flask, render_template, jsonify, request
+from typing import Dict, Any, Tuple, Callable, Optional, List
+from flask import Flask, render_template, jsonify, request, Response
 from ..database import Database
 from ..models import Job
 from ..smart_matcher import create_smart_matcher
@@ -53,7 +54,7 @@ def get_jobs():
         # Text-based filters
         for field in ['title', 'company', 'source', 'location', 'job_type', 'experience_level']:
             value = request.args.get(field)
-            if value:
+            if value is not None and value != "":
                 filters[field] = value
         
         # Boolean filters

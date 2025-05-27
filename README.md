@@ -1,152 +1,214 @@
-# JobRadar (jobsc)
+# JobRadar
 
-A Python-based CLI and web dashboard for aggregating, filtering, and viewing remote job listings from multiple sources.
+A Python-based job delivery application that aggregates job listings from multiple sources and provides intelligent filtering and delivery interfaces.
 
 ## Features
-- Fetch jobs from RSS, JSON, and custom HTML sources
-- **Smart job filtering** - Only stores relevant jobs using intelligent matching
-- Advanced filtering (keywords, location, salary, job type, experience, remote, source)
-- Deduplication and persistence in SQLite
-- Web dashboard for interactive job search
-- Telegram notification support (optional)
-- Extensible parser and notifier architecture
 
-## Smart Filtering
+- **Multi-source job fetching**: RSS feeds, JSON APIs, HTML scraping, and headless browser automation
+- **Smart job matching**: AI-powered job relevance scoring and filtering
+- **Multiple delivery interfaces**: CLI commands and web dashboard
+- **Advanced filtering**: Company, location, salary, experience level, and custom filters
+- **Database storage**: SQLite with efficient job management and deduplication
+- **Rate limiting**: Configurable rate limiting for respectful data collection
+- **Proxy support**: Rotation and geographic targeting for challenging sources
 
-JobRadar includes intelligent job filtering that happens **during the fetch process**, ensuring only relevant jobs enter your database. This dramatically improves performance and keeps your database clean.
+## Architecture
 
-### Benefits
-- 🎯 **Precision**: Only stores jobs matching your interests
-- 💾 **Efficiency**: Up to 98% reduction in database size
-- ⚡ **Performance**: Faster searches with less data
-- 🧹 **Clean Data**: No irrelevant jobs cluttering results
+JobRadar follows a modular architecture for maintainability and scalability:
 
-### How It Works
-The smart matcher uses keyword categories to identify relevant jobs:
-- **Customer Support**: customer service, support, customer experience
-- **Technical Support**: technical support, product support, helpdesk, L1/L2/L3
-- **Specialist Roles**: implementation specialist, solutions engineer
-- **Compliance & Analysis**: AML analyst, compliance officer, fraud analysis
-- **Operations**: business operations, operations manager
+### Core Components
 
-### Configuration
-Add smart filtering configuration to your `projectrules` file:
+- **`jobradar.fetchers`**: Modular job fetching system
+  - `base_fetcher.py`: Core Fetcher class with RSS, JSON, and HTML support
+  - `browser_pool.py`: Browser context management for headless fetching
+  - `parsers.py`: Site-specific HTML parsers for various job boards
+  - `headless.py`: Advanced headless browser automation with security challenge handling
+- **`jobradar.models`**: Data models (Job, Feed) with proper validation
+- **`jobradar.database`**: SQLite database operations with connection pooling
+- **`jobradar.smart_matcher`**: AI-based job relevance scoring and filtering
+- **`jobradar.web`**: Flask-based web dashboard with REST API
+- **`jobradar.cli`**: Command-line interface for all operations
+
+### Delivery Interfaces
+
+1. **CLI Interface**: Command-line tools for fetching, searching, and managing jobs
+2. **Web Dashboard**: Modern web interface with filtering and job browsing
+
+### Smart Matching System
+
+The smart matcher uses keyword-based scoring to identify relevant jobs across categories:
+- Customer Support & Service
+- Technical Support & Engineering
+- Specialist Roles & Analysis
+- Compliance & Analysis
+- Operations & Management
+
+## Installation
+
+```bash
+# Clone the repository
+git clone <repository_url>
+cd jobsc
+
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Initialize database
+python -m jobradar.cli migrate
+```
+
+## Usage Examples
+
+### CLI Commands
+
+```bash
+# Fetch jobs from all configured sources
+python -m jobradar.cli fetch
+
+# Fetch from specific source with smart filtering
+python -m jobradar.cli fetch --feed "RemoteOK" --smart --min-score 2
+
+# Search jobs with filters
+python -m jobradar.cli search --title "engineer" --remote --limit 20
+
+# Smart search by categories
+python -m jobradar.cli smart-search --categories "customer_support,technical_support" --min-score 2
+
+# Start web dashboard
+python -m jobradar.cli web --host 0.0.0.0 --port 8082
+```
+
+### Web Dashboard
+
+Access the web interface at `http://localhost:8082` for:
+- Browse jobs with real-time filtering
+- Smart matching with category selection
+- Export job lists
+- View job statistics and analytics
+
+### API Endpoints
+
+- `GET /api/jobs` - Get jobs with filtering and pagination
+- `GET /api/filters` - Get available filter options
+- `GET /api/smart-jobs` - Get smart-filtered jobs by category
+
+## Configuration
+
+Configure job sources in `config.yaml`:
 
 ```yaml
+feeds:
+  - name: "RemoteOK"
+    url: "https://remoteok.io/remote-jobs"
+    type: "html"
+    parser: "remoteok"
+    fetch_method: "headless"
+    rate_limit:
+      requests_per_minute: 10
+
 smart_filtering:
-  enabled: true               # Enable smart filtering by default
-  min_score: 1               # Minimum relevance score (1-5)
-  categories:                # Categories of jobs you're interested in
-    - customer_support       # Customer service, support, customer experience
-    - technical_support      # Technical support, product support, helpdesk
-    - specialist_roles       # Integration specialist, solutions engineer, etc.
-    - compliance_analysis    # AML, compliance, fraud analysis, KYC/EDD
-    - operations            # Operations, business operations
+  enabled: true
+  min_score: 1
+  categories:
+    - "customer_support"
+    - "technical_support"
+
+filters:
+  exclude_companies:
+    - "spam-company"
+  min_salary: 50000
 ```
 
-### CLI Usage
+## Development
 
-**Fetch with smart filtering (default):**
+### Code Standards
+
+This project follows strict Python best practices as defined in `.cursorrules`:
+
+- **PEP 8 compliance**: All code follows Python style guidelines
+- **Type hints**: All functions include proper type annotations
+- **Modular architecture**: Clear separation between fetchers, delivery, and smart matching
+- **Comprehensive testing**: TDD approach with pytest
+- **Documentation**: Detailed docstrings following PEP 257
+
+### Running Tests
+
 ```bash
-jobradar fetch
-```
-
-**Override smart filtering:**
-```bash
-jobradar fetch --no-smart-filter          # Disable smart filtering
-jobradar fetch --min-score 2              # Increase minimum score
-```
-
-**Search for smart-matched jobs:**
-```bash
-jobradar smart-search --categories customer_support --limit 10
-```
-
-### Demo
-Run the demo to see the effectiveness:
-```bash
-python demo_smart_filtering.py
-```
-
-## Project Structure
-
-```
-/Users/slavaidler/project/jobsc/
-├── feeds.yml (symlink to projectrules)
-├── jobs.db
-├── jobradar/
-│   ├── cli.py
-│   ├── database.py
-│   ├── filters.py
-│   ├── smart_matcher.py         # Smart filtering logic
-│   ├── models.py
-│   ├── fetchers.py
-│   ├── core.py
-│   ├── notifiers/
-│   ├── parsers/
-│   └── web/
-│       ├── app.py
-│       └── templates/
-│           └── index.html
-├── tests/
-├── demo_smart_filtering.py      # Effectiveness demo
-├── pyproject.toml
-└── README.md
-```
-
-## Setup
-
-1. **Clone the repository and enter the project directory:**
-   ```bash
-   cd /Users/slavaidler/project/jobsc
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   pip install -e .[dev]
-   ```
-
-3. **Ensure configuration file exists:**
-   - Use `feeds.yml` (symlinked to `projectrules`) for feed configuration.
-
-4. **(Optional) Set up Telegram notifications:**
-   - Add `TG_TOKEN` and `TG_CHAT_ID` to your environment or a `.env` file.
-
-## Usage
-
-### Fetch Jobs
-Fetch jobs from all configured feeds and store them in the database:
-```bash
-jobradar fetch
-```
-
-### Start the Web Dashboard
-Run the dashboard and open it in your browser:
-```bash
-jobradar web --port 8080
-```
-Visit [http://localhost:8080](http://localhost:8080)
-
-### Filtering and Search
-Use the dashboard's filter panel to search jobs by:
-- Keywords
-- Location
-- Salary range
-- Job type
-- Experience level
-- Remote status
-- Source
-
-### Run Tests
-Run all tests with:
-```bash
+# Run all tests
 pytest
+
+# Run specific test modules
+pytest tests/test_fetchers_module.py -v
+
+# Run with coverage
+pytest --cov=jobradar
 ```
 
-## Notes
-- The database schema must match the latest model. If you add new fields, update the schema accordingly.
-- If you encounter errors about missing columns, run the appropriate `ALTER TABLE` commands or delete `jobs.db` to recreate it.
-- For troubleshooting, check logs and ensure all dependencies are installed.
+### Architecture Guidelines
+
+- **Fetchers**: Data collection modules for different sources
+- **Delivery**: CLI and web interfaces for user interaction
+- **Smart Matching**: AI-based job filtering and relevance scoring
+- **Separation of Concerns**: Clear boundaries between components
+- **Error Handling**: Graceful handling with proper logging
+- **Rate Limiting**: Respectful data collection practices
+
+### Adding New Job Sources
+
+1. Create a parser in `jobradar/fetchers/parsers.py`
+2. Add configuration in `config.yaml`
+3. Write tests in `tests/`
+4. Update documentation
+
+### Modular Fetcher System
+
+The fetcher system is organized into focused modules:
+
+```python
+from jobradar.fetchers import Fetcher, BrowserPool  # Main interfaces
+from jobradar.fetchers.base_fetcher import Fetcher  # Core functionality
+from jobradar.fetchers.parsers import HTMLParsers   # Site-specific parsing
+from jobradar.fetchers.headless import HeadlessFetcher  # Browser automation
+```
+
+## Supported Job Sources
+
+- **RemoteOK**: Remote job listings with skill tags
+- **Indeed**: Large job board with advanced search
+- **LinkedIn**: Professional network jobs (limited access)
+- **WorkingNomads**: Curated remote positions
+- **Remotive**: Remote tech jobs with filtering
+- **Snaphunt**: Global job marketplace
+- **Various RSS feeds**: Automated job feed processing
+
+## Database Schema
+
+Jobs are stored with comprehensive metadata:
+- Basic info: title, company, URL, source
+- Details: location, salary, job type, experience level
+- Metadata: posting date, remote status, skills
+- Relevance: smart match scores and categories
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Write tests for new functionality
+4. Ensure all tests pass
+5. Follow the code standards in `.cursorrules`
+6. Submit a pull request
 
 ## License
-MIT
+
+[Insert your license information here]
+
+## Support
+
+For issues and questions:
+- Check the GitHub issues
+- Review the configuration examples
+- Ensure proper environment setup
